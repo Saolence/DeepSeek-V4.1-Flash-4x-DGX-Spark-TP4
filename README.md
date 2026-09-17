@@ -211,7 +211,13 @@ required, because the ring spans the tensor-parallel group. Expect ring bandwidt
 switched: opposite ranks talk through a transit node, so the bisection is one link, not two.
 Cabling, addressing, the `NFS_SHARE=0` migration, pitfalls and the full benchmark panel
 (prefill 1k-64k, decode prose and code at 1-8 streams, with the sparkDash filler caveat)
-are in [`docs/switchless-ring.md`](docs/switchless-ring.md). The ring configuration came from
+are in [`docs/switchless-ring.md`](docs/switchless-ring.md).
+
+Before listing more than two devices in `IB_HCA`, read the same document's
+["Devices past the second are never advertised"](docs/switchless-ring.md#devices-past-the-second-are-never-advertised):
+NCCL accepts the extra devices, publishes listener GIDs for only the first two, and
+reports nothing — so a four-device board serves on half of it until the dual-PCI-domain
+patch and its flags are in place. `doctor` warns, and the port counters are the proof. The ring configuration came from
 [MiaAI-Lab#3](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-DGX-Sparks/pull/3) /
 [#19](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-DGX-Sparks/pull/19), with the NCCL
 patch from [FujitsuPolycom/sparkring](https://github.com/FujitsuPolycom/sparkring).

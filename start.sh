@@ -482,6 +482,9 @@ cmd_doctor() {
       warn "switchless ring: head preflight failed"
       ok=1
     fi
+    # Not fatal: the ring still forms, the extra devices just stay idle. Silence
+    # here is what makes a half-used dual-plane board hard to notice.
+    nccl_gid_publication_check
     for wh in "${WORKER_HOSTS[@]}"; do
       if wgid=$(remote_on "$wh" "set -e
 $(nccl_worker_settings)

@@ -203,6 +203,126 @@ NCCL INFO PAT transport setup disabled by NCCL_SWITCHLESS_RING_ONLY
 [+] switchless ring: 10.0.0.4 preflight OK (RoCEv2 GID index 3)
 ```
 
+## Devices past the second are never advertised
+
+`NCCL_IB_HCA` accepts any number of devices, and NCCL says nothing when it cannot
+use them. The switchless-cycle patch publishes at most **two** listener GIDs per
+rank — `gidSlot < 2` in `net_ib/connect.cc`, in both the original and the patched
+loop. Devices after the second are therefore absent from the handle every peer
+receives, no peer can match their subnet, and their ports carry zero bytes. The
+ring still forms and serves; it just runs on the first two devices.
+
+The symptom is easy to miss because the channel plan looks right:
+
+```
+NCCL INFO NET/IB : Using [0]rocep1s0f0:1/RoCE [1]rocep1s0f1:1/RoCE \
+                   [2]roceP2p1s0f0:1/RoCE [3]roceP2p1s0f1:1/RoCE [RO]
+NCCL INFO Channel 02/0 : 0[0] -> 1[0] [send] via NET/IB/2
+```
+
+Both lines name device 2, and it still moves nothing. What actually happens is a
+silent collapse onto the first device, visible only in the routing log:
+
+```
+NCCL INFO NET/IB: Subnet-aware routing: overriding dev 2 with dev 0
+NCCL INFO NET/IB: Subnet-aware routing: overriding dev 3 with dev 0
+```
+
+`doctor` now says so instead of leaving it to be discovered by counters:
+
+```
+warning: IB_HCA lists 4 devices but listener GID publication is capped at 2
+warning: only rocep1s0f0 and rocep1s0f1 can be selected by a peer; the rest stay at zero
+warning: set NCCL_IB_EXTENDED_IPV4_GIDS=1 with a dual-PCI-domain NCCL build
+```
+
+### Raising the cap
+
+A four-Spark board exposes its ConnectX-7 functions through **two PCI root
+domains** (`0000:` and `0002:` here), which NCCL discovers as four separate
+devices:
+
+```
+[0] rocep1s0f0    pciPath=/sys/devices/pci0000:00/.../0000:01:00.0
+[1] rocep1s0f1    pciPath=/sys/devices/pci0000:00/.../0000:01:00.0
+[2] roceP2p1s0f0  pciPath=/sys/devices/pci0002:00/.../0002:01:00.0
+[3] roceP2p1s0f1  pciPath=/sys/devices/pci0002:00/.../0002:01:00.0
+```
+
+FujitsuPolycom/sparkring's cumulative
+[`nccl-2.30.7-dual-pci-domain.patch`](https://github.com/FujitsuPolycom/sparkring/blob/main/spark_transport/nccl/DUAL_PCI_DOMAIN.md)
+raises the bound to four behind a flag, and adds a fallback that substitutes a
+device **within the same PCI root** rather than collapsing across domains. Apply
+it **alone** — it already contains the switchless-cycle changes, so it must not be
+layered over them.
+
+```ini
+NCCL_IB_EXTENDED_IPV4_GIDS=1     # publish up to four IPv4-mapped listener GIDs
+NCCL_IB_PRESERVE_PCI_DOMAIN=1    # substitute within the selected PCI root
+NCCL_IB_ROUTE_DIAGNOSTICS=1      # one record per final QP: which device it landed on
+NCCL_IB_QPS_PER_CONNECTION=1
+```
+
+Set `IB_HCA` to all four devices and the ring uses both planes. Every value has to
+reach every rank, head and workers alike.
+
+The flags are read at NCCL init, so the effect is visible before any request:
+
+```
+NCCL INFO NET/IB ListenerRouting format=ipv4-v1 advertised=4 observed=4
+```
+
+`advertised=2` means the cap is still in force. The routing records then stop
+collapsing: `overriding dev 3 with dev 2` stays inside the second PCI root instead
+of reaching for `dev 0`.
+
+### Channel count
+
+`NCCL_MIN_NCHANNELS` and `NCCL_MAX_NCHANNELS` decide how many channels share the
+devices. Four channels over four devices gives one channel per device, which is
+the mapping that reaches all of them:
+
+```ini
+NCCL_MIN_NCHANNELS=4
+NCCL_MAX_NCHANNELS=4
+```
+
+Eight channels over four devices still round-robins 0,1,2,3,0,1,2,3, so it is not
+wrong, but a four-versus-eight comparison on this workload found no serving
+benefit and 0.14 GiB more head-node shared memory
+([sparkring#193](https://github.com/FujitsuPolycom/sparkring/issues/193)).
+
+### What it is worth
+
+Measured here on four Sparks, TP4 / EP2, DSpark k=5, one 64k prefill plus 16
+concurrent streams, IB port counters before and after:
+
+| port | PCI root | before | after |
+|---|---|---:|---:|
+| `rocep1s0f0` | 0000 | 65.45 GB | 32.20 GB |
+| `rocep1s0f1` | 0000 | 65.45 GB | 32.19 GB |
+| `roceP2p1s0f0` | 0002 | **0.00 GB** | **31.80 GB** |
+| `roceP2p1s0f1` | 0002 | **0.00 GB** | **31.80 GB** |
+
+Half the traffic moves to the second plane. The total is unchanged — this spreads
+the same collectives over twice the ports, it does not make them smaller. The
+ported case is bounded by what the ring was waiting on, not by cable bandwidth:
+the ports ran at roughly 5 % of line rate under this load, so expect a low
+single-digit prefill gain and no decode change, matching the
+[contributor measurement](https://github.com/FujitsuPolycom/sparkring/blob/main/performance/records/transport/nccl-dual-domain-deepseek.md)
+of +5.43–6.82 % prefill for this exact model and runtime. Verify with counters and
+the routing records rather than trusting the channel plan.
+
+### Diagnosing it
+
+`ListenerRouting` and the routing records are logged at the `NET` level. With
+`NCCL_DEBUG_SUBSYS=INIT,ENV` they never appear and the collapse is invisible:
+
+```ini
+NCCL_DEBUG=INFO
+NCCL_DEBUG_SUBSYS=INIT,ENV,NET    # add NET while validating; drop it afterwards
+```
+
 ## Pitfalls
 
 * **`EP_SIZE` is free, `TP_SIZE` is not.** The ring needs `NNODES == TP_SIZE == 4`

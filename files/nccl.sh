@@ -59,6 +59,44 @@ nccl_mount_args() {
 }
 
 # Ring-only environment, appended to a docker-argument array (head side).
+# The switchless-cycle patch publishes at most two listener GIDs per rank
+# (`gidSlot < 2` in net_ib/connect.cc). Every device past the second in IB_HCA is
+# therefore never advertised, so no peer can match its subnet and those ports carry
+# zero bytes -- silently, because NCCL logs nothing about it at INFO. The cumulative
+# dual-PCI-domain patch raises the bound to four gated on
+# NCCL_IB_EXTENDED_IPV4_GIDS, which also matters when a second ConnectX-7 sits in a
+# different PCI root domain (0002: vs 0000: on this hardware).
+dual_pci_domain_args() {
+  [[ "${NCCL_IB_EXTENDED_IPV4_GIDS:-0}" == 1 ]] || return 0
+  local -n dd_args=$1
+  dd_args+=(-e NCCL_IB_EXTENDED_IPV4_GIDS=1
+    -e "NCCL_IB_PRESERVE_PCI_DOMAIN=${NCCL_IB_PRESERVE_PCI_DOMAIN:-1}"
+    -e "NCCL_IB_ROUTE_DIAGNOSTICS=${NCCL_IB_ROUTE_DIAGNOSTICS:-1}"
+    -e "NCCL_IB_QPS_PER_CONNECTION=${NCCL_IB_QPS_PER_CONNECTION:-1}")
+}
+
+dual_pci_domain_env_string() {
+  [[ "${NCCL_IB_EXTENDED_IPV4_GIDS:-0}" == 1 ]] || return 0
+  printf -- '-e NCCL_IB_EXTENDED_IPV4_GIDS=1 -e %q -e %q -e %q' \
+    "NCCL_IB_PRESERVE_PCI_DOMAIN=${NCCL_IB_PRESERVE_PCI_DOMAIN:-1}" \
+    "NCCL_IB_ROUTE_DIAGNOSTICS=${NCCL_IB_ROUTE_DIAGNOSTICS:-1}" \
+    "NCCL_IB_QPS_PER_CONNECTION=${NCCL_IB_QPS_PER_CONNECTION:-1}"
+}
+
+# Silent otherwise: NCCL accepts any number of devices in IB_HCA and simply stops
+# advertising after the second, so half a dual-plane board stays idle with no error.
+nccl_gid_publication_check() {
+  switchless_ring_enabled || return 0
+  local -a hcas=()
+  IFS=, read -r -a hcas <<<"${IB_HCA#=}"
+  (( ${#hcas[@]} > 2 )) || return 0
+  [[ "${NCCL_IB_EXTENDED_IPV4_GIDS:-0}" == 1 ]] && return 0
+  echo "warning: IB_HCA lists ${#hcas[@]} devices but listener GID publication is capped at 2" >&2
+  echo "warning: only ${hcas[0]} and ${hcas[1]} can be selected by a peer; the rest stay at zero" >&2
+  echo "warning: set NCCL_IB_EXTENDED_IPV4_GIDS=1 with a dual-PCI-domain NCCL build" >&2
+  return 0
+}
+
 switchless_ring_args() {
   switchless_ring_enabled || return 0
   local -n ring_args=$1
@@ -68,6 +106,7 @@ switchless_ring_args() {
     -e "NCCL_IB_SUBNET_PREFIX_LEN=${NCCL_IB_SUBNET_PREFIX_LEN:-24}"
     -e "NCCL_MIN_NCHANNELS=${NCCL_MIN_NCHANNELS:-4}"
     -e "NCCL_P2P_LEVEL=${NCCL_P2P_LEVEL:-SYS}")
+  dual_pci_domain_args ring_args
 }
 
 # Same environment as one shell-quoted `-e KEY=VALUE` string, for the worker heredoc.
@@ -79,6 +118,9 @@ switchless_ring_env_string() {
     "NCCL_IB_SUBNET_PREFIX_LEN=${NCCL_IB_SUBNET_PREFIX_LEN:-24}" \
     "NCCL_MIN_NCHANNELS=${NCCL_MIN_NCHANNELS:-4}" \
     "NCCL_P2P_LEVEL=${NCCL_P2P_LEVEL:-SYS}"
+  local dd
+  dd=$(dual_pci_domain_env_string)
+  [[ -z "$dd" ]] || printf ' %s' "$dd"
 }
 
 nccl_validate_config() {
@@ -195,5 +237,6 @@ nccl_worker_settings() {
   for key in NCCL_OVERLAY_PIP NCCL_PIP_SO NCCL_CONTAINER_DIR NCCL_SWITCHLESS_RING_ONLY IB_HCA IMAGE NCCL_IB_GID_INDEX; do
     printf '%s=%q\n' "$key" "${!key:-}"
   done
-  declare -f nccl_library nccl_mount_args ring_gid_index nccl_preflight
+  declare -f nccl_library nccl_mount_args ring_gid_index nccl_preflight \
+    dual_pci_domain_args dual_pci_domain_env_string nccl_gid_publication_check
 }

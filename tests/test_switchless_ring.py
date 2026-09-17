@@ -585,6 +585,93 @@ class NfsShareOffTests(unittest.TestCase):
         example = (ROOT / ".env.tp4.example").read_text()
         self.assertIn("NFS_SHARE=0", example)
 
+class DualPciDomainTests(unittest.TestCase):
+    """The two-listener-GID cap that silently idles every device past the second."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(dir=ROOT / "tests")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_warns_when_ib_hca_exceeds_the_gid_cap(self):
+        """The warning goes to stderr: it is advice, not a diagnostic result."""
+        result = nccl_shell(
+            'nccl_gid_publication_check',
+            {"NCCL_SWITCHLESS_RING_ONLY": "1",
+             "IB_HCA": "rocep1s0f0,rocep1s0f1,roceP2p1s0f0,roceP2p1s0f1",
+             "NCCL_IB_EXTENDED_IPV4_GIDS": "0"})
+        self.assertEqual(result.returncode, 0, "a capped list must not be fatal")
+        self.assertIn("capped at 2", result.stderr)
+        self.assertIn("rocep1s0f0", result.stderr)
+
+    def test_silent_at_or_below_the_cap(self):
+        for hca in ("rocep1s0f0", "rocep1s0f0,rocep1s0f1"):
+            with self.subTest(hca=hca):
+                result = nccl_shell("nccl_gid_publication_check",
+                                    {"NCCL_SWITCHLESS_RING_ONLY": "1", "IB_HCA": hca,
+                                     "NCCL_IB_EXTENDED_IPV4_GIDS": "0"})
+                self.assertEqual(result.stderr.strip(), "")
+
+    def test_silent_once_publication_is_extended(self):
+        result = nccl_shell("nccl_gid_publication_check",
+                            {"NCCL_SWITCHLESS_RING_ONLY": "1",
+                             "IB_HCA": "rocep1s0f0,rocep1s0f1,roceP2p1s0f0,roceP2p1s0f1",
+                             "NCCL_IB_EXTENDED_IPV4_GIDS": "1"})
+        self.assertEqual(result.stderr.strip(), "")
+
+    def test_silent_when_the_ring_is_off(self):
+        result = nccl_shell("nccl_gid_publication_check",
+                            {"NCCL_SWITCHLESS_RING_ONLY": "0",
+                             "IB_HCA": "a,b,c,d", "NCCL_IB_EXTENDED_IPV4_GIDS": "0"})
+        self.assertEqual(result.stderr.strip(), "")
+
+    def test_extension_flags_reach_both_rank_paths(self):
+        """Head and workers build their own environment; both must carry the flags."""
+        on = dict(BASE_SETTINGS, NCCL_SWITCHLESS_RING_ONLY="1",
+                  IB_HCA="rocep1s0f0,rocep1s0f1,roceP2p1s0f0,roceP2p1s0f1",
+                  NCCL_IB_EXTENDED_IPV4_GIDS="1")
+        argv = check(nccl_shell('a=(); switchless_ring_args a; printf "%s\\n" "${a[@]}"', on))
+        envs = check(nccl_shell('switchless_ring_env_string', on))
+        for name in ("NCCL_IB_EXTENDED_IPV4_GIDS=1", "NCCL_IB_PRESERVE_PCI_DOMAIN=1",
+                     "NCCL_IB_ROUTE_DIAGNOSTICS=1", "NCCL_IB_QPS_PER_CONNECTION=1"):
+            self.assertIn(name, argv, name)
+            self.assertIn(name, envs, name)
+
+    def test_head_and_worker_extension_parity(self):
+        on = dict(BASE_SETTINGS, NCCL_SWITCHLESS_RING_ONLY="1",
+                  NCCL_IB_EXTENDED_IPV4_GIDS="1")
+        out = check(nccl_shell('''
+          a=(); switchless_ring_args a
+          printf 'ARGV %s\\n' "${a[@]}"
+          printf 'STRV %s\\n' $(switchless_ring_env_string)
+        ''', on))
+        argv = sorted(lines_after(out, "ARGV "))
+        strv = sorted(lines_after(out, "STRV "))
+        self.assertEqual(argv, strv)
+
+    def test_extension_is_off_by_default(self):
+        """Byte-identical off: no extension flag may appear unless asked for."""
+        out = check(nccl_shell('''
+          a=(); switchless_ring_args a
+          printf '%s\\n' "${a[@]}"
+          switchless_ring_env_string
+        ''', dict(BASE_SETTINGS, NCCL_SWITCHLESS_RING_ONLY="1")))
+        self.assertNotIn("NCCL_IB_EXTENDED_IPV4_GIDS", out)
+        self.assertNotIn("NCCL_IB_PRESERVE_PCI_DOMAIN", out)
+
+    def test_doctor_reports_the_cap(self):
+        source = (ROOT / "start.sh").read_text()
+        doctor = source[source.index("cmd_doctor()"):]
+        doctor = doctor[:doctor.index("\n}\n")]
+        self.assertIn("nccl_gid_publication_check", doctor)
+
+    def test_worker_settings_ship_the_new_helpers(self):
+        out = check(nccl_shell("nccl_worker_settings"))
+        for function in ("dual_pci_domain_args", "dual_pci_domain_env_string",
+                         "nccl_gid_publication_check"):
+            self.assertIn(f"{function} ()", out)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

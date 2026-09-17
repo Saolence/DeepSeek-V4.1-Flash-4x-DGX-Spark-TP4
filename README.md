@@ -33,7 +33,7 @@ Everything else (memory fraction 0.80, 8M-token KV pin, 1M context, NFS/Engram l
 
 ## Measured
 
-sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet, no foreign traffic (checked against the engine's `#running-req` log). Four DGX Spark, TP4/EP2, driver 580.x, `lmsysorg/sglang:dev-dsv41` base. Full record with every intermediate step: [`docs/window-20260916.md`](docs/window-20260916.md), raw outputs in [`docs/results/window-20260916/`](docs/results/window-20260916/).
+sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet, no foreign traffic (checked against the engine's `#running-req` log). Four DGX Spark, TP4/EP2, driver 580.x, `lmsysorg/sglang:dev-dsv41` base. Both images were rebuilt from a fresh clone of this repository on 2026-09-17 and re-measured (base: prose c1 52.7 / c8 170, code c1 100.5; canary: prose c1 55.2 / c8 177, code c1 100.8). Full record with every intermediate step: [`docs/window-20260916.md`](docs/window-20260916.md), raw outputs in [`docs/results/window-20260916/`](docs/results/window-20260916/).
 
 ### Prose decode, aggregate tok/s (per stream in brackets)
 
@@ -58,7 +58,7 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 | this profile, base image (chunk 4096 + indexer backport) | 3532 | 4006 | 4038 | 3917 | 3230 | 2724 |
 | this profile, canary image | 3174 | 3982 | 4180 | 4010 | 3499 | 2701 |
 
-Long-context checks on the canary image: needle retrieval PASS at 131k and 262k tokens; head `MemAvailable` low-water 7.0 GiB during the 262k cold prefill (7.7 GiB on the base image).
+Long-context checks on the canary image: needle retrieval PASS at 131k, 262k and **985k** tokens (the 985k prompt prefilled cold in 732 s, ~1.3k tok/s); head `MemAvailable` low-water 7.0 GiB during the 262k cold prefill and 6.6 GiB during the 985k one (7.7 GiB at 262k on the base image).
 
 ## Quick start
 
@@ -122,7 +122,6 @@ Upstream's profile is one env change away: `MAX_RUNNING_REQUESTS=8`, `CHUNKED_PR
 ## Known limits
 
 - The canary image's 4k-token prefill is ~6 % slower than the base image; everything from 16k up is faster.
-- 1M-token prompts were not re-tested with the 4096 chunk; upstream reports a 9.6 GB indexer transient at 1M with a 16k chunk on GB300.
 - Sampled decode on the canary image is ~5 % behind greedy (see above).
 - Single-stream prose speed is bounded by DSpark acceptance (~2–3 accepted tokens per step on prose against ~6 on code); no configuration changes that.
 

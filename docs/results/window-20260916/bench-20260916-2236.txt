@@ -1,0 +1,9 @@
+prose c1 per 51.57 agg 51.57 ttft 197.22 err None
+prose c2 per 39.93 agg 76.65 ttft 239.83 err None
+prose c4 per 28.48 agg 109.3 ttft 429.34 err None
+prose c8 per 19.58 agg 151.45 ttft 454.43 err None
+prose c16 per 16.67 agg 248.75 ttft 705.89 err None
+code c1 per 96.67 agg 96.67 ttft 279.59 err None
+code c8 per 55.99 agg 446.68 ttft 712.25 err None
+code c16 per 39.98 agg 595.27 ttft 1088.99 err None
+structured c1 per 104.52 agg 104.52 ttft 173.46 err None

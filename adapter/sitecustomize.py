@@ -31,6 +31,19 @@ class EngramLoader(importlib.abc.Loader):
         elif module.__name__ == 'sglang.srt.model_executor.model_runner':
             from prefill_empty_cache import install
             install(module)
+        elif module.__name__ == 'sglang.srt.layers.attention.deepseek_v4_backend':
+            # sglang#39187 backport: dense prefill indexer scored in bounded row chunks.
+            # Gate checked BEFORE the import so a disabled flag imports nothing. v1 targets
+            # the dev-dsv41 image backend (self.candidate_masks); v2 is the PR verbatim for
+            # candidate_metadata backends (dsv4.1 branch >= f80c91a4b). Each refuses the other.
+            if os.environ.get('DSV41_INDEXER_CHUNKED', '0').strip() not in ('0', 'off', 'false', ''):
+                import inspect as _inspect
+                _src = _inspect.getsource(module.DeepseekV4AttnBackend._low_ratio_index_topk_dense)
+                if 'self.candidate_masks' in _src:
+                    from indexer_chunked import install as install_indexer_chunked
+                else:
+                    from indexer_chunked_v2 import install as install_indexer_chunked
+                install_indexer_chunked(module)
         elif module.__name__ == 'sglang.srt.entrypoints.openai.encoding_dsv41':
             from encoding_compat import install_encoder
             install_encoder(module)
@@ -60,6 +73,7 @@ class EngramFinder(importlib.abc.MetaPathFinder):
                             'sglang.srt.layers.quantization.fp8_utils',
                             'sglang.srt.layers.quantization.fp8',
                             'sglang.srt.model_executor.model_runner',
+                            'sglang.srt.layers.attention.deepseek_v4_backend',
                             'sglang.srt.entrypoints.openai.encoding_dsv41',
                             'sglang.srt.entrypoints.openai.serving_chat',
                             'sglang.srt.managers.schedule_batch',

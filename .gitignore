@@ -34,3 +34,7 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+
+# staged by scripts/fetch-sglang-canary.sh
+runtime/sglang-canary/python/
+runtime/sglang-canary/src.tgz

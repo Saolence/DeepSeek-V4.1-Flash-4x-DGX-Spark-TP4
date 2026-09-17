@@ -1,0 +1,2 @@
+prose c1 per 54.76 agg 54.76 ttft 194.58 err None
+code c1 per 102.71 agg 102.71 ttft 267.87 err None

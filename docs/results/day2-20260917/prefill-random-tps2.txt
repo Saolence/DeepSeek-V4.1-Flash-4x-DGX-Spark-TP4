@@ -1,0 +1,5 @@
+random-text prefill target=16384 prompt_tokens=11809 ttft_s=3.8 tok/s=3069
+random-text prefill target=32768 prompt_tokens=23784 ttft_s=7.1 tok/s=3350
+random-text prefill target=65536 prompt_tokens=47292 ttft_s=13.3 tok/s=3547
+random-text prefill target=131072 prompt_tokens=94332 ttft_s=26.8 tok/s=3518
+random-text prefill target=262144 prompt_tokens=188694 ttft_s=59.3 tok/s=3180

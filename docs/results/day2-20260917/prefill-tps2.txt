@@ -1,0 +1,6 @@
+prefill 4114 tok/s 3597.13 ttft_ms 1143.69 err None
+prefill 16403 tok/s 4029.83 ttft_ms 4070.4 err None
+prefill 32787 tok/s 4043.82 ttft_ms 8107.92 err None
+prefill 65553 tok/s 4044.57 ttft_ms 16207.65 err None
+prefill 131093 tok/s 3977.17 ttft_ms 32961.41 err None
+prefill 262163 tok/s 3389.73 ttft_ms 77340.48 err None

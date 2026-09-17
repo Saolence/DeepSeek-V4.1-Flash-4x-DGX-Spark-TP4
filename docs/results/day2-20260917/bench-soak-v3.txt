@@ -1,0 +1,6 @@
+code c16 per 43.14 agg 649.82 ttft 1025.8 err None
+prose c16 per 18.62 agg 282.3 ttft 363.97 err None
+code c16 per 53.89 agg 861.81 ttft 789.64 err None
+prose c16 per 19.71 agg 298.81 ttft 459.53 err None
+code c16 per 52.03 agg 832.26 ttft 763.72 err None
+prose c16 per 19.84 agg 300.66 ttft 378.75 err None

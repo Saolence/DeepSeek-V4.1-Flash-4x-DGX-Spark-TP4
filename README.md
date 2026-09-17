@@ -45,7 +45,7 @@ Relative to the upstream TP4 example, all of it in `.env.tp4.example` plus gated
 | Setting | Upstream | Here | Why (measured) |
 |---|---|---|---|
 | `EP_SIZE` | 4 | **2** | Two expert groups instead of four halve the per-layer straggler wait: NCCL time per step 16.5 → 10.2 ms, MoE GEMM unchanged |
-| `DSV41_CACHE_GIB` / `WAYS` | 0 / 4 | **4 / 16** | Engram rows do repeat (bigram/trigram heads): 67–76 % hit rate, 4x fewer NVMe reads; 16 ways are free |
+| `DSV41_CACHE_GIB`/`WAYS` | 0/4 | **4/16** | Engram rows do repeat (bigram/trigram heads): 67–76 % hit rate, 4x fewer NVMe reads; 16 ways are free |
 | `--min-free-slots-delay 1` | on | on | Without it the admission delayer never fills the last slot |
 | `--enable-deepseek-v4-fp4-indexer` | off | **on** | FP4 DSA indexer kernel path |
 | `DSPARK_BLOCK_SIZE` | 3 | **5** | k=3 is a 3-node prose result; on TP4 k=5 wins on code by ~10 % and ties on prose |

@@ -192,8 +192,12 @@ NCCL runtimes make DeepEP's `check_nccl_so()` abort before NCCL is initialised.
 `NCCL_OVERLAY_PIP` defaults to following the switch and can be enabled on its own.
 
 It needs a **patched NCCL** in `NCCL_HOST_DIR` (FujitsuPolycom/sparkring's
-`switchless-cycle` / `skip-tree-pat` patches) on every node, and per-node weights, because a
-ring has no fabric-wide NFS path. `./start.sh doctor` validates the configuration and every
+`switchless-cycle` / `skip-tree-pat` patches) on every node, and `NFS_SHARE=0` with a
+per-node checkpoint, because a ring has no fabric-wide NFS path. `NFS_SHARE=0` is a
+pre-existing switch that did not work — `cmd_share` always stood the exporter up, so
+`serve` re-shared and replaced the local volumes. It is a real no-op now, and `serve`
+refuses a worker whose `dsv41-weights` volume is still NFS-backed from an earlier
+`NFS_SHARE=1` run, which would otherwise read over NFS with the probe passing. `./start.sh doctor` validates the configuration and every
 rank's HCA/GID before any container is replaced, and `serve` treats a failure as fatal:
 
 ```
@@ -205,8 +209,9 @@ rank's HCA/GID before any container is replaced, and `serve` treats a failure as
 `EP_SIZE` stays free here (`1 <= EP_SIZE <= TP_SIZE`); only `NNODES == TP_SIZE == 4` is
 required, because the ring spans the tensor-parallel group. Expect ring bandwidth, not
 switched: opposite ranks talk through a transit node, so the bisection is one link, not two.
-Cabling, addressing, pitfalls and a first-boot measurement are in
-[`docs/switchless-ring.md`](docs/switchless-ring.md). The ring configuration came from
+Cabling, addressing, the `NFS_SHARE=0` migration, pitfalls and the full benchmark panel
+(prefill 1k-64k, decode prose and code at 1-8 streams, with the sparkDash filler caveat)
+are in [`docs/switchless-ring.md`](docs/switchless-ring.md). The ring configuration came from
 [MiaAI-Lab#3](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-DGX-Sparks/pull/3) /
 [#19](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-DGX-Sparks/pull/19), with the NCCL
 patch from [FujitsuPolycom/sparkring](https://github.com/FujitsuPolycom/sparkring).

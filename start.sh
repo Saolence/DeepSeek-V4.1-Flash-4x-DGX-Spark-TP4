@@ -552,6 +552,9 @@ nccl_preflight" 2>/dev/null); then
       if ! nfs_worker_has_model "$h"; then
         warn "$h: weights missing/incomplete or volume $NFS_VOLUME unavailable (NFS_SHARE=$NFS_SHARE)"
         ok=1
+      elif [[ "$NFS_SHARE" == "0" ]] && ! local_model_volume_is_local "$h"; then
+        warn "$h: $NFS_VOLUME is NFS-backed; NFS_SHARE=0 needs a local volume"
+        ok=1
       fi
     else
       err "SSH to $h FAILED"
@@ -699,6 +702,8 @@ cmd_serve() {
     for h in "${WORKER_HOSTS[@]}"; do
       nfs_worker_has_model "$h" \
         || die "$h: local volume $NFS_VOLUME is missing/incomplete. Provision local weights (docs/switchless-ring.md); NFS_SHARE=0 disables NFS setup."
+      local_model_volume_is_local "$h" \
+        || die "$h: $NFS_VOLUME is NFS-backed (left over from an NFS_SHARE=1 run) — NFS_SHARE=0 would still read over NFS. Remove it and copy the checkpoint locally: ssh $h docker volume rm $NFS_VOLUME"
     done
     info "weights: NFS_SHARE=0 — head reads $MODEL_DIR; workers use local volume $NFS_VOLUME"
   fi

@@ -185,6 +185,20 @@ local_model_has_weights() {
   done
 }
 
+# NFS_SHARE=0 needs a *local* volume. A leftover NFS-backed volume of the same name
+# still contains config.json, so the existence probe above passes and the worker
+# quietly keeps reading over NFS — the exact thing NFS_SHARE=0 exists to avoid, and
+# it fails confusingly the moment the exporter is gone. `Driver` cannot tell the two
+# apart (both report "local"); the mount options can: a plain volume reports null,
+# an NFS one reports {"type":"nfs",...}. nfs_unmount_workers() never removes it here.
+local_model_volume_is_local() {
+  local host="$1"
+  remote_on "$host" --timeout 60 \
+    "opts=\$(docker volume inspect -f '{{json .Options}}' $(printf '%q' "$NFS_VOLUME") 2>/dev/null) || exit 1
+     case \"\$opts\" in *'\"type\":\"nfs\"'*) exit 1 ;; esac" \
+    >/dev/null 2>&1
+}
+
 nfs_worker_has_model() {
   local host="$1"
   # Inspect first: `docker run -v` would create an empty volume on a typo.

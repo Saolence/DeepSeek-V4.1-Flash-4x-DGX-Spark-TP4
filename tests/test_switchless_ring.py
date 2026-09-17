@@ -420,6 +420,18 @@ class LocalWeightsTests(unittest.TestCase):
         for i in range(shards):
             (self.model / f"model-{i:05d}-of-{shards:05d}.safetensors").write_text("x" * 32)
 
+    def sent_command(self):
+        """The remote script local_model_volume_is_local really sends. Its own
+        remote_on call redirects to /dev/null, so the stub writes to a file."""
+        sent = Path(self.tmp.name) / "sent"
+        check(nfs_shell(r'''
+          remote_on() { local d; if [[ "${2:-}" == "--timeout" ]]; then d="$4"; else d="$2"; fi; printf '%s\n' "$d" > "$SENT"; }
+          NFS_VOLUME=dsv41-weights
+          local_model_volume_is_local fakehost
+        ''', ROOT, {"SENT": str(sent)}))
+        self.assertTrue(sent.exists(), "remote_on was never called")
+        return sent.read_text()
+
     def test_accepts_a_complete_checkpoint(self):
         self.complete()
         check(nfs_shell("local_model_has_weights", self.model))
@@ -443,6 +455,52 @@ class LocalWeightsTests(unittest.TestCase):
         self.complete()
         (self.model / "model-00000-of-00002.safetensors").write_text("")
         self.assertNotEqual(nfs_shell("local_model_has_weights", self.model).returncode, 0)
+
+    def test_volume_probe_rejects_a_leftover_nfs_volume(self):
+        """NFS_SHARE=0 must not silently keep reading over NFS.
+
+        A leftover NFS volume has the same name and still has config.json, so the
+        existence probe passes and the worker keeps reading over NFS — which fails
+        confusingly the moment the exporter is gone. `Driver` cannot tell the two
+        apart (both report "local"); the mount options can. This asserts the shape
+        of the command only; the test below runs it.
+        """
+        out = self.sent_command()
+        self.assertIn("{{json .Options}}", out)
+        self.assertIn("dsv41-weights", out)
+        self.assertIn('type":"nfs', out)
+        self.assertIn("exit 1", out)
+
+    def test_volume_probe_logic_distinguishes_real_volumes(self):
+        """Run the command files/nfs-share.sh actually sends, against real docker.
+
+        Not a copy of the logic: the fragment is captured from the shipped
+        `local_model_volume_is_local`, so changing the shipped criterion fails this.
+        """
+        import shutil
+        if not shutil.which("docker") or \
+                subprocess.run(["docker", "info"], capture_output=True).returncode != 0:
+            self.skipTest("docker daemon not reachable")
+        fragment = self.sent_command()
+        names = {"qa-probe-local": False, "qa-probe-nfs": True}
+        for name, is_nfs in names.items():
+            subprocess.run(["docker", "volume", "rm", name], capture_output=True)
+            create = ["docker", "volume", "create"]
+            if is_nfs:
+                create += ["--driver", "local", "--opt", "type=nfs",
+                           "--opt", "o=addr=10.0.0.9,nolock,soft",
+                           "--opt", "device=:/var/tmp/x"]
+            subprocess.run(create + [name], capture_output=True, check=True)
+        try:
+            for name, is_nfs in names.items():
+                shipped = fragment.replace("dsv41-weights", name)
+                accepted = subprocess.run(["bash", "-c", shipped],
+                                          capture_output=True).returncode == 0
+                self.assertEqual(accepted, not is_nfs,
+                                 f"{name}: accepted={accepted}, expected local={not is_nfs}")
+        finally:
+            for name in names:
+                subprocess.run(["docker", "volume", "rm", name], capture_output=True)
 
     def test_worker_probe_does_not_pull_or_create_a_volume(self):
         """The old probe pulled alpine and `-v` would create an empty volume."""
@@ -489,6 +547,20 @@ class NfsShareOffTests(unittest.TestCase):
         ''', Path(self.tmp.name), dict(BASE_SETTINGS, NFS_SHARE="1")))
         self.assertIn("NFS-STARTED", out)
         self.assertIn("NFS-PUBLISHED", out)
+
+    def test_serve_refuses_a_leftover_nfs_volume(self):
+        source = (ROOT / "start.sh").read_text()
+        serve = source[source.index("cmd_serve()"):]
+        serve = serve[:serve.index("\n}\n")]
+        branch = serve[serve.index('if [[ "$NFS_SHARE" == "1" ]]'):]
+        self.assertIn("local_model_volume_is_local", branch)
+        self.assertIn("would still read over NFS", branch)
+
+    def test_doctor_flags_it_too(self):
+        source = (ROOT / "start.sh").read_text()
+        doctor = source[source.index("cmd_doctor()"):]
+        doctor = doctor[:doctor.index("\n}\n")]
+        self.assertIn("local_model_volume_is_local", doctor)
 
     def test_serve_validates_local_weights_before_replacing_containers(self):
         source = (ROOT / "start.sh").read_text()

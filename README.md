@@ -30,6 +30,7 @@ One image, one env file. Everything in the tables below labelled **production** 
 | Shared expert | `DSV41_SHARED_PAD_K=1` | on | keeps the K=576 shape on the b12x kernel, −0.9 ms/step, bit-identical |
 | Transport | `SGLANG_ROCE_ALLREDUCE=1`, `SGLANG_ROCE_MAX_SIZE=2097152`, `B12X_ROCE_HCA=rocep1s0f0,roceP2p1s0f0` | on | TP SUM all-reduces up to 2 MiB over RDMA on both rails; 2 MiB covers the 16-slot step (983 KB) |
 | NCCL | `IB_HCA=rocep1s0f0,roceP2p1s0f0` | on | neutral within noise, kept for the remaining collectives |
+| Fabric | switched RoCE, tree reachable | on | every default assumes a switch; a switchless ring sets `NCCL_SWITCHLESS_RING_ONLY=1` instead (see below) |
 | Serving | `--enable-cache-report`, `--min-free-slots-delay 1`, `DSV41_MAX_NEW_TOKENS`, loop abort, thinking alias | on | cached-token usage for clients; the rest is upstream's |
 | Rust image processor | `SGLANG_RUST_BUILD_MODE=never` | off | the branch's `cargo` probe can hang the head before the HTTP server starts; PIL path is used |
 | Adaptive chunk sizer | `DSV41_ADAPTIVE_CHUNK` | off | superseded by the bounded indexer; it would only shrink chunks needlessly |
@@ -163,6 +164,63 @@ docker build -f Dockerfile.canary-roce -t dsv41-4x-spark:canary-roce .    # on e
 ```
 
 `B12X_ROCE_HCA` lists the RDMA devices to stripe across (both rails of the switched fabric here; their port-1 GID at `NCCL_IB_GID_INDEX` must be populated). The boot log must show `RoCEnante ready: world=4 hcas=...` and later `ROCE_TP8_ROUTE ... bytes=491520`. Measured on this fleet (512 KiB route, same boot as the canary row): +3 % prose c1, +8 % structured c1, +3.5 % code c16 over the canary image; needle PASS at 131k and 262k; a soak of three 16-stream code/prose waves concurrent with a 262k cold prefill completed with zero transport errors. `SGLANG_ROCE_MAX_SIZE` defaults to the overlay's 512 KiB; the 16-request decode step's all-reduce is 983 KB, so 2 MiB (b12x's own default) routes it too: c16 aggregate +4.5 %, code c1 +3 %, structured +3 %, and sampled decode becomes equal to greedy. The cost is a new transport in the decode path: b12x reports one open issue where a rank wedged under long mixed-context traffic on an earlier revision ([b12x#313](https://github.com/local-inference-lab/b12x/issues/313)); the result-boundary health check in the overlay is the mitigation, and NCCL is one env change away (`SGLANG_ROCE_ALLREDUCE=0`).
+
+### Optional: switchless ring (no RoCE switch)
+
+Every default above assumes a switched fabric. If the four Sparks are cabled as a **ring**
+(a-b-c-d-a, one DAC per adjacency, no switch) the stack does not boot on those defaults:
+NCCL builds a tree as well as the ring, the tree wants a direct path between opposite nodes
+(rank0 ↔ rank2) which a four-node ring does not have, and RoCE queue pairs do not follow IP
+routing, so the tree never connects and `ncclCommInitRank` dies with
+`NCCL error: unhandled system error`. No counter and no `/health` ever come up.
+
+`NCCL_SWITCHLESS_RING_ONLY=1` fixes it. It is off by default and every other deployment is
+unchanged when it is off — the switch only decides whether the ring environment and the
+overlay mount are injected:
+
+```ini
+NCCL_SWITCHLESS_RING_ONLY=1
+NCCL_ALGO=Ring
+NCCL_P2P_LEVEL=SYS
+```
+
+The switch then injects `NCCL_SWITCHLESS_RING_ONLY=1`, `NCCL_ALGO=Ring`,
+`NCCL_SKIP_TREE_CONNECT=1`, `NCCL_IB_SUBNET_PREFIX_LEN=24`, `NCCL_MIN_NCHANNELS=4` and
+`NCCL_P2P_LEVEL=SYS` into the head **and every worker**, and mounts the patched library
+**over** the image's pip NCCL (`NCCL_PIP_SO`) rather than on `LD_LIBRARY_PATH` — two visible
+NCCL runtimes make DeepEP's `check_nccl_so()` abort before NCCL is initialised.
+`NCCL_OVERLAY_PIP` defaults to following the switch and can be enabled on its own.
+
+It needs a **patched NCCL** in `NCCL_HOST_DIR` (FujitsuPolycom/sparkring's
+`switchless-cycle` / `skip-tree-pat` patches) on every node, and `NFS_SHARE=0` with a
+per-node checkpoint, because a ring has no fabric-wide NFS path. `NFS_SHARE=0` is a
+pre-existing switch that did not work — `cmd_share` always stood the exporter up, so
+`serve` re-shared and replaced the local volumes. It is a real no-op now, and `serve`
+refuses a worker whose `dsv41-weights` volume is still NFS-backed from an earlier
+`NFS_SHARE=1` run, which would otherwise read over NFS with the probe passing. `./start.sh doctor` validates the configuration and every
+rank's HCA/GID before any container is replaced, and `serve` treats a failure as fatal:
+
+```
+[+] switchless ring: config OK (NNODES=4 TP=4 EP=2, IB_HCA=rocep1s0f0,rocep1s0f1)
+[+] switchless ring: head preflight OK (RoCEv2 GID index 3)
+[+] switchless ring: 10.0.0.2 preflight OK (RoCEv2 GID index 3)
+```
+
+`EP_SIZE` stays free here (`1 <= EP_SIZE <= TP_SIZE`); only `NNODES == TP_SIZE == 4` is
+required, because the ring spans the tensor-parallel group. Expect ring bandwidth, not
+switched: opposite ranks talk through a transit node, so the bisection is one link, not two.
+Cabling, addressing, the `NFS_SHARE=0` migration, pitfalls and the full benchmark panel
+(prefill 1k-64k, decode prose and code at 1-8 streams, with the sparkDash filler caveat)
+are in [`docs/switchless-ring.md`](docs/switchless-ring.md).
+
+Before listing more than two devices in `IB_HCA`, read the same document's
+["Devices past the second are never advertised"](docs/switchless-ring.md#devices-past-the-second-are-never-advertised):
+NCCL accepts the extra devices, publishes listener GIDs for only the first two, and
+reports nothing — so a four-device board serves on half of it until the dual-PCI-domain
+patch and its flags are in place. `doctor` warns, and the port counters are the proof. The ring configuration came from
+[MiaAI-Lab#3](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-DGX-Sparks/pull/3) /
+[#19](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-DGX-Sparks/pull/19), with the NCCL
+patch from [FujitsuPolycom/sparkring](https://github.com/FujitsuPolycom/sparkring).
 
 ### Optional: prefill TP split (with either canary image)
 

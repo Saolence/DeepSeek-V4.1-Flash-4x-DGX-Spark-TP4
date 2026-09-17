@@ -113,6 +113,8 @@ docker build -f Dockerfile.canary -t dsv41-4x-spark:canary .   # on the head and
 ./start-tp4.sh serve
 ```
 
+`SGLANG_RUST_BUILD_MODE=never` is required on the branch images: the dsv4.1 tree probes a Rust toolchain to build its image preprocessor, and that `cargo --version` call can hang before the HTTP server starts (workers come up, `/health` never answers). `never` keeps the PIL image path.
+
 `SGLANG_DSPARK_FOLDED_SAMPLING=2` matters: the branch folds only the greedy draft proposal into the CUDA graph by default, and sampled requests (temperature > 0, i.e. normal chat) would take the eager path. With it forced, sampled decode runs ~5 % slower than greedy on this image (it was equal on the base image); without it, ~9 % slower.
 
 ### Optional: RoCEnante for the tensor-parallel all-reduces

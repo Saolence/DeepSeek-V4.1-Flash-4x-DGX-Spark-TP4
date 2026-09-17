@@ -15,6 +15,29 @@ Other work this profile builds on:
 - **local-inference-lab / Luke Alonso and Jason (original-el8)**, [b12x](https://github.com/local-inference-lab/b12x): RoCEnante, the one-shot RDMA all-reduce (`runtime/b12x`, Apache-2.0, frozen at the SG17 revision).
 - **MiaAI-Lab/sparkDash**, the benchmark used for every number below.
 
+## What runs in production (2026-09-17)
+
+One image, one env file. Everything in the tables below labelled **production** is this stack:
+
+| Layer | Setting | Status | Why |
+|---|---|---|---|
+| Image | `Dockerfile.canary-roce` = upstream `dsv4.1` branch at `f80c91a4b` + RoCEnante overlay + all adapters | **on** | fastest decode of the three images (branch kernels + RDMA all-reduce) |
+| Slots | `MAX_RUNNING_REQUESTS=16` | on | adds the c16 tier; c1–c8 unchanged |
+| Experts | `EP_SIZE=2`, `--enable-deepseek-v4-fp4-indexer` | on | straggler wait halved; kernel path |
+| Engram | `DSV41_CACHE_GIB=4`, `DSV41_CACHE_WAYS=16` | on | 67–76 % row-cache hits on real text |
+| Draft | `DSPARK_BLOCK_SIZE=5`, `SGLANG_DSPARK_FOLDED_SAMPLING=2` | on | k=5 wins on code, ties on prose; forced fold keeps sampled decode equal to greedy on the branch |
+| Prefill | `CHUNKED_PREFILL_SIZE=4096` + `DSV41_INDEXER_CHUNKED=1` (v3) + `SPARK_PREFILL_TP_SPLIT=1` | on | bounded indexer transient (sglang#39187) plus the SG18 row split across ranks; 985k prompt leaves 5 GiB on the head |
+| Shared expert | `DSV41_SHARED_PAD_K=1` | on | keeps the K=576 shape on the b12x kernel, −0.9 ms/step, bit-identical |
+| Transport | `SGLANG_ROCE_ALLREDUCE=1`, `SGLANG_ROCE_MAX_SIZE=2097152`, `B12X_ROCE_HCA=rocep1s0f0,roceP2p1s0f0` | on | TP SUM all-reduces up to 2 MiB over RDMA on both rails; 2 MiB covers the 16-slot step (983 KB) |
+| NCCL | `IB_HCA=rocep1s0f0,roceP2p1s0f0` | on | neutral within noise, kept for the remaining collectives |
+| Serving | `--enable-cache-report`, `--min-free-slots-delay 1`, `DSV41_MAX_NEW_TOKENS`, loop abort, thinking alias | on | cached-token usage for clients; the rest is upstream's |
+| Rust image processor | `SGLANG_RUST_BUILD_MODE=never` | off | the branch's `cargo` probe can hang the head before the HTTP server starts; PIL path is used |
+| Adaptive chunk sizer | `DSV41_ADAPTIVE_CHUNK` | off | superseded by the bounded indexer; it would only shrink chunks needlessly |
+| DSpark SPS table / ragged verify | `DSPARK_SPS_TABLE` | off (file absent) | crashes the Engram path on this model; verify-all schedule stays |
+| NVFP4 checkpoint (`nvidia/DeepSeek-V4.1-Flash-NVFP4`) | – | not used | routed experts only, no bandwidth saved on GB10, +16 GiB, DSpark unvalidated |
+
+Rollback to any earlier point is an env change: `SGLANG_ROCE_ALLREDUCE=0` drops the RDMA transport, `SPARK_PREFILL_TP_SPLIT=0` the row split, `IMAGE=dsv41-4x-spark:canary` the RoCEnante overlay, `IMAGE=dsv41-4x-spark:local` the branch.
+
 ## What this profile changes
 
 Relative to the upstream TP4 example, all of it in `.env.tp4.example` plus gated adapters:
@@ -37,7 +60,7 @@ Everything else (memory fraction 0.80, 8M-token KV pin, 1M context, NFS/Engram l
 
 ## Measured
 
-sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet, no foreign traffic (checked against the engine's `#running-req` log). Four DGX Spark, TP4/EP2, driver 580.x, `lmsysorg/sglang:dev-dsv41` base. Both images were rebuilt from a fresh clone of this repository on 2026-09-17 and re-measured (base: prose c1 52.7 / c8 170, code c1 100.5; canary: prose c1 55.2 / c8 177, code c1 100.8). Full record with every intermediate step: [`docs/window-20260916.md`](docs/window-20260916.md), raw outputs in [`docs/results/window-20260916/`](docs/results/window-20260916/).
+sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet, no foreign traffic (checked against the engine's `#running-req` log). Four DGX Spark, TP4/EP2, driver 580.x, `lmsysorg/sglang:dev-dsv41` base. Run-to-run spread between boots of the same configuration is about ±2 % on c1, so differences inside that band are noise. Both images were rebuilt from a fresh clone of this repository on 2026-09-17 and re-measured (base: prose c1 52.7 / c8 170, code c1 100.5; canary: prose c1 55.2 / c8 177, code c1 100.8). Full record with every intermediate step: [`docs/window-20260916.md`](docs/window-20260916.md), raw outputs in [`docs/results/window-20260916/`](docs/results/window-20260916/).
 
 ### Prose decode, aggregate tok/s (per stream in brackets)
 
@@ -46,8 +69,7 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 | upstream TP4 example (from its README) | 45.4 | 72.9 | 103.1 (26.7) | 114.1 (23.2) | 134.2 (22.0) |
 | this profile, `Dockerfile` (base image) | 51.6 | 76.7 | 109.3 (28.5) | 160.9 (20.8) | 248.8 (16.7) |
 | this profile, `Dockerfile.canary` (upstream dsv4.1 branch) | 55.4 | 80.9 | 118.9 (30.7) | 178.2 (24.0) | 277.5 (18.6) |
-| this profile, `Dockerfile.canary-roce` (branch + RoCEnante, 512 KiB route) | 56.9 | 82.4 | 120.4 (32.0) | 180.0 (24.1) | 275.6 (18.3) |
-| this profile, `Dockerfile.canary-roce`, 2 MiB route (`SGLANG_ROCE_MAX_SIZE=2097152`) | **56.2** | – | – | **181.5 (24.6)** | **288.4 (18.7)** |
+| **production** (`Dockerfile.canary-roce`, 2 MiB route, prefill TP split, both rails) | **57.0** | **81.7** | **118.6 (31.5)** | **185.1 (24.7)** | **290.7 (18.9)** |
 
 ### Code and structured decode, aggregate tok/s
 
@@ -55,9 +77,7 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 |---|---:|---:|---:|---:|
 | this profile, base image | 96.7 | 446.7 | 595.3 | 104.5 |
 | this profile, canary image | 100.4 | 513.3 | 838.6 | 108.0 |
-| this profile, canary + RoCEnante (512 KiB route) | 103.1 | 509.6 | **867.6** | 116.9 |
-| this profile, canary + RoCEnante (2 MiB route) | **106.6** | – | 851.8 | **120.0** |
-| this profile, base image + RoCEnante | 104.0 | 450.3 | 770.0 | 112.1 |
+| **production** (see above) | **107.0** | **540.1** | **860.8** | **115.4** |
 
 ### Prefill, cold, tok/s by prompt length
 
@@ -66,18 +86,18 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 | upstream example (chunk 1024) | 3350 | 3782 | 3768 | 3531 | 3251 | – |
 | this profile, base image (chunk 4096 + indexer backport) | 3532 | 4006 | 4038 | 3917 | 3230 | 2724 |
 | this profile, canary image | 3174 | 3982 | 4180 | 4010 | 3499 | 2701 |
-| this profile, canary-roce + prefill TP split (v3) | **4070** | **4513** | **4554** | **4375** | **4364** | **3893** |
+| **production** (canary-roce + prefill TP split) | **4070** | **4513** | **4554** | **4375** | **4364** | **3893** |
 
 **Caveat on the prefill table:** sparkDash's prefill filler is one repeated token, so every filler token hits the same Engram row and the row cache (`DSV41_CACHE_GIB=4`) inflates those numbers (reported by koldfrontier in [MiaAI-Lab#21](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-DGX-Sparks/issues/21)). The same canary engine on random-word text, cold, one request per size, `prompt_tokens / TTFT`:
 
 | random text | 11.8k | 23.8k | 47.3k | 94.3k | 188.7k |
 |---|---:|---:|---:|---:|---:|
 | canary, tok/s | 3330 | 3666 | 3347 | 3187 | 2657 |
-| canary-roce + prefill TP split (v3), tok/s | 2879 | 3612 | 3776 | 4006 | 3092 |
+| production, tok/s | 2879 | 3612 | 3776 | 4006 | 3092 |
 
 Use these rows for real prompts; the sparkDash column overstates by 9–20 % at 16k–128k. The v3 row's 12k value is a single cold request right after boot (the split does not engage below 32k).
 
-Long-context checks: needle retrieval PASS at 131k, 262k and **985k** tokens on the canary image (985k cold prefill 732 s, head `MemAvailable` low-water 6.6 GiB) and on canary-roce + prefill TP split (131k 25.6 s, 262k 58 s, **985k 585 s**, low-water 5.0 GiB). The split without the chunked scoring (SG18 as published, base image) reached 503 s at 985k but left only 1.9 GiB on the head, which is why v3 keeps the 2 GiB logits budget inside each rank's partition.
+Long-context checks: needle retrieval PASS at 131k, 262k and **985k** tokens on the canary image (985k cold prefill 732 s, head `MemAvailable` low-water 6.6 GiB) and on production (131k 25.6 s, 262k 58 s, **985k 585 s**, low-water 5.0 GiB). The split without the chunked scoring (SG18 as published, base image) reached 503 s at 985k but left only 1.9 GiB on the head, which is why v3 keeps the 2 GiB logits budget inside each rank's partition.
 
 ## Quick start
 
@@ -130,7 +150,7 @@ docker build -f Dockerfile.canary-roce -t dsv41-4x-spark:canary-roce .    # on e
 ./start-tp4.sh serve
 ```
 
-`B12X_ROCE_HCA` lists the RDMA devices to stripe across (both rails of the switched fabric here; their port-1 GID at `NCCL_IB_GID_INDEX` must be populated). The boot log must show `RoCEnante ready: world=4 hcas=...` and later `ROCE_TP8_ROUTE ... bytes=491520`. Measured on this fleet: +3 % prose c1, +8 % structured c1, +3.5 % code c16 over the canary image; needle PASS at 131k and 262k; a soak of three 16-stream code/prose waves concurrent with a 262k cold prefill completed with zero transport errors. `SGLANG_ROCE_MAX_SIZE` defaults to the overlay's 512 KiB; the 16-request decode step's all-reduce is 983 KB, so 2 MiB (b12x's own default) routes it too: c16 aggregate +4.5 %, code c1 +3 %, structured +3 %, and sampled decode becomes equal to greedy. The cost is a new transport in the decode path: b12x reports one open issue where a rank wedged under long mixed-context traffic on an earlier revision ([b12x#313](https://github.com/local-inference-lab/b12x/issues/313)); the result-boundary health check in the overlay is the mitigation, and NCCL is one env change away (`SGLANG_ROCE_ALLREDUCE=0`).
+`B12X_ROCE_HCA` lists the RDMA devices to stripe across (both rails of the switched fabric here; their port-1 GID at `NCCL_IB_GID_INDEX` must be populated). The boot log must show `RoCEnante ready: world=4 hcas=...` and later `ROCE_TP8_ROUTE ... bytes=491520`. Measured on this fleet (512 KiB route, same boot as the canary row): +3 % prose c1, +8 % structured c1, +3.5 % code c16 over the canary image; needle PASS at 131k and 262k; a soak of three 16-stream code/prose waves concurrent with a 262k cold prefill completed with zero transport errors. `SGLANG_ROCE_MAX_SIZE` defaults to the overlay's 512 KiB; the 16-request decode step's all-reduce is 983 KB, so 2 MiB (b12x's own default) routes it too: c16 aggregate +4.5 %, code c1 +3 %, structured +3 %, and sampled decode becomes equal to greedy. The cost is a new transport in the decode path: b12x reports one open issue where a rank wedged under long mixed-context traffic on an earlier revision ([b12x#313](https://github.com/local-inference-lab/b12x/issues/313)); the result-boundary health check in the overlay is the mitigation, and NCCL is one env change away (`SGLANG_ROCE_ALLREDUCE=0`).
 
 ### Optional: prefill TP split (with either canary image)
 

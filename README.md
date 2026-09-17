@@ -58,6 +58,14 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 | this profile, base image (chunk 4096 + indexer backport) | 3532 | 4006 | 4038 | 3917 | 3230 | 2724 |
 | this profile, canary image | 3174 | 3982 | 4180 | 4010 | 3499 | 2701 |
 
+**Caveat on the prefill table:** sparkDash's prefill filler is one repeated token, so every filler token hits the same Engram row and the row cache (`DSV41_CACHE_GIB=4`) inflates those numbers (reported by koldfrontier in [MiaAI-Lab#21](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-DGX-Sparks/issues/21)). The same canary engine on random-word text, cold, one request per size, `prompt_tokens / TTFT`:
+
+| random text | 11.8k | 23.8k | 47.3k | 94.3k | 188.7k |
+|---|---:|---:|---:|---:|---:|
+| tok/s | 3330 | 3666 | 3347 | 3187 | 2657 |
+
+That is 9–20 % below the sparkDash column at 16k–128k and within 2 % at 262k; use this row for real prompts.
+
 Long-context checks on the canary image: needle retrieval PASS at 131k, 262k and **985k** tokens (the 985k prompt prefilled cold in 732 s, ~1.3k tok/s); head `MemAvailable` low-water 7.0 GiB during the 262k cold prefill and 6.6 GiB during the 985k one (7.7 GiB at 262k on the base image).
 
 ## Quick start

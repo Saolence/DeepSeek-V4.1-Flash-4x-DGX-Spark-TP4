@@ -99,6 +99,18 @@ Use these rows for real prompts; the sparkDash column overstates by 9–20 % at 
 
 Long-context checks: needle retrieval PASS at 131k, 262k and **985k** tokens on the canary image (985k cold prefill 732 s, head `MemAvailable` low-water 6.6 GiB) and on production (131k 25.6 s, 262k 58 s, **985k 585 s**, low-water 5.0 GiB). The split without the chunked scoring (SG18 as published, base image) reached 503 s at 985k but left only 1.9 GiB on the head, which is why v3 keeps the 2 GiB logits budget inside each rank's partition.
 
+## Quality gate
+
+Speed changes here are meant to be lossless: same weights, every draft token verified by the target, backports bitwise-equal to the stock path in the CPU tests. Because RoCEnante sums in a different order than NCCL and the branch ships different mHC kernels, the numerics are not identical, so the profile is also scored. `scripts/qeval.py` runs 75 auto-scored tasks (code executed against hidden asserts, JSON schema-checked, numeric answers matched, format constraints enforced, prose checked for degeneration; no LLM judge), one request at a time, temperature 0, and compares two runs pairwise with McNemar's exact test.
+
+| Run (2026-09-17, same day, same fleet) | pass | broke | fixed | p |
+|---|---:|---:|---:|---:|
+| base image, same env (`dsv41-4x-spark:local`, chunk 4096, indexer backport) | 71/75 | – | – | – |
+| **production** (branch + RoCEnante + prefill TP split) | **72/75** | 0 | 1 (`json_count`) | 1.000 |
+| reference: upstream example, 2026-09-11 | 71/75 | | | |
+
+The three tasks that fail on every stack (`code_interval_intersect`, `json_escape`, `math_m9`) fail identically on the upstream example. Raw results: [`docs/results/quality-20260917/`](docs/results/quality-20260917/). Run it from a worker, not from the head (it executes model-generated Python).
+
 ## Quick start
 
 Identical to upstream; only the example file differs.

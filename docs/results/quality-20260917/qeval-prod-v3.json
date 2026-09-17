@@ -1,0 +1,2254 @@
+{
+ "label": "prod-v3",
+ "url": "http://10.100.96.2:8888/v1/chat/completions",
+ "concurrency": 1,
+ "wall_s": 142.8,
+ "utc": "2026-09-17T12:04:46Z",
+ "median_tok_s": 66.37,
+ "truncated": 1,
+ "results": [
+  {
+   "id": "code_merge_intervals",
+   "category": "code",
+   "content": "```python\ndef merge_intervals(intervals):\n    if not intervals:\n        return []\n    intervals = sorted(intervals, key=lambda x: x[0])\n    merged = [intervals[0][:]]\n    for start, end in intervals[1:]:\n        if start <= merged[-1][1] + 1:\n            if end > merged[-1][1]:\n                merged[-1][1] = end\n        else:\n            merged.append([start, end])\n    return merged\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 108,
+   "seconds": 1.39,
+   "tok_s": 77.7,
+   "spec": {
+    "spec_accept_rate": 0.8285714285714286,
+    "spec_accept_length": 5.142857142857143,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 87,
+    "spec_num_proposed_drafts": 105,
+    "spec_verify_ct": 21,
+    "spec_correct_drafts_histogram": [
+     2,
+     1,
+     0,
+     2,
+     0,
+     16
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_longest_run",
+   "category": "code",
+   "content": "```python\ndef longest_run(xs):\n    if not xs:\n        return 0\n    best = 1\n    current = 1\n    for i in range(1, len(xs)):\n        if xs[i] > xs[i - 1]:\n            current += 1\n            if current > best:\n                best = current\n        else:\n            current = 1\n    return best\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 87,
+   "seconds": 1.028,
+   "tok_s": 84.64,
+   "spec": {
+    "spec_accept_rate": 0.96,
+    "spec_accept_length": 5.8,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 72,
+    "spec_num_proposed_drafts": 75,
+    "spec_verify_ct": 15,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     1,
+     0,
+     0,
+     14
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_roman_to_int",
+   "category": "code",
+   "content": "```python\ndef roman_to_int(s):\n    if not s:\n        return 0\n    values = {'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100, 'D': 500, 'M': 1000}\n    total = 0\n    prev = 0\n    for ch in reversed(s):\n        val = values[ch]\n        if val < prev:\n            total -= val\n        else:\n            total += val\n            prev = val\n    return total\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 121,
+   "seconds": 1.407,
+   "tok_s": 85.99,
+   "spec": {
+    "spec_accept_rate": 0.9,
+    "spec_accept_length": 5.5,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 99,
+    "spec_num_proposed_drafts": 110,
+    "spec_verify_ct": 22,
+    "spec_correct_drafts_histogram": [
+     1,
+     0,
+     0,
+     2,
+     2,
+     17
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_balanced",
+   "category": "code",
+   "content": "```python\ndef balanced(s):\n    stack = []\n    pairs = {')': '(', ']': '[', '}': '{'}\n    for ch in s:\n        if ch in '([{':\n            stack.append(ch)\n        elif ch in ')]}':\n            if not stack or stack.pop() != pairs[ch]:\n                return False\n    return not stack\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 80,
+   "seconds": 0.967,
+   "tok_s": 82.72,
+   "spec": {
+    "spec_accept_rate": 0.9428571428571428,
+    "spec_accept_length": 5.714285714285714,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 66,
+    "spec_num_proposed_drafts": 70,
+    "spec_verify_ct": 14,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     0,
+     1,
+     2,
+     11
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_flatten",
+   "category": "code",
+   "content": "```python\ndef flatten(xs):\n    result = []\n    stack = [iter(xs)]\n    while stack:\n        try:\n            x = next(stack[-1])\n        except StopIteration:\n            stack.pop()\n            continue\n        if isinstance(x, list):\n            stack.append(iter(x))\n        else:\n            result.append(x)\n    return result\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 76,
+   "seconds": 1.149,
+   "tok_s": 66.14,
+   "spec": {
+    "spec_accept_rate": 0.6823529411764706,
+    "spec_accept_length": 4.470588235294118,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 58,
+    "spec_num_proposed_drafts": 85,
+    "spec_verify_ct": 17,
+    "spec_correct_drafts_histogram": [
+     2,
+     1,
+     3,
+     2,
+     0,
+     9
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_top_words",
+   "category": "code",
+   "content": "```python\ndef top_words(text, n):\n    from collections import Counter\n    import re\n    if not text or n <= 0:\n        return []\n    words = re.findall(r'\\b[a-z]+\\b', text.lower())\n    counts = Counter(words)\n    return sorted(counts.items(), key=lambda x: (-x[1], x[0]))[:n]\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 82,
+   "seconds": 1.015,
+   "tok_s": 80.75,
+   "spec": {
+    "spec_accept_rate": 0.88,
+    "spec_accept_length": 5.466666666666667,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 66,
+    "spec_num_proposed_drafts": 75,
+    "spec_verify_ct": 15,
+    "spec_correct_drafts_histogram": [
+     0,
+     1,
+     1,
+     0,
+     2,
+     11
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_bisect_left",
+   "category": "code",
+   "content": "```python\ndef bisect_left(xs, v):\n    lo, hi = 0, len(xs)\n    while lo < hi:\n        mid = (lo + hi) // 2\n        if xs[mid] < v:\n            lo = mid + 1\n        else:\n            hi = mid\n    return lo\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 72,
+   "seconds": 0.889,
+   "tok_s": 80.96,
+   "spec": {
+    "spec_accept_rate": 1.0,
+    "spec_accept_length": 6.0,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 60,
+    "spec_num_proposed_drafts": 60,
+    "spec_verify_ct": 12,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     12
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_transpose",
+   "category": "code",
+   "content": "```python\ndef transpose(m):\n    if not m:\n        return []\n    return [list(row) for row in zip(*m)]\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 30,
+   "seconds": 0.483,
+   "tok_s": 62.14,
+   "spec": {
+    "spec_accept_rate": 1.0,
+    "spec_accept_length": 6.0,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 25,
+    "spec_num_proposed_drafts": 25,
+    "spec_verify_ct": 5,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     5
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_rle",
+   "category": "code",
+   "content": "```python\ndef rle(s):\n    if not s:\n        return []\n    result = []\n    prev = s[0]\n    count = 1\n    for ch in s[1:]:\n        if ch == prev:\n            count += 1\n        else:\n            result.append((prev, count))\n            prev = ch\n            count = 1\n    result.append((prev, count))\n    return result\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 90,
+   "seconds": 1.069,
+   "tok_s": 84.17,
+   "spec": {
+    "spec_accept_rate": 0.9866666666666667,
+    "spec_accept_length": 6.0,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 74,
+    "spec_num_proposed_drafts": 75,
+    "spec_verify_ct": 15,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     0,
+     0,
+     1,
+     14
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_is_palindrome",
+   "category": "code",
+   "content": "```python\ndef is_palindrome(s):\n    filtered = [c.lower() for c in s if c.isalnum()]\n    return filtered == filtered[::-1]\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 37,
+   "seconds": 0.654,
+   "tok_s": 56.54,
+   "spec": {
+    "spec_accept_rate": 0.725,
+    "spec_accept_length": 4.625,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 29,
+    "spec_num_proposed_drafts": 40,
+    "spec_verify_ct": 8,
+    "spec_correct_drafts_histogram": [
+     0,
+     1,
+     2,
+     0,
+     1,
+     4
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_chunk",
+   "category": "code",
+   "content": "```python\ndef chunk(xs, k):\n    if k <= 0:\n        raise ValueError(\"k must be positive\")\n    return [xs[i:i + k] for i in range(0, len(xs), k)]\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 50,
+   "seconds": 0.695,
+   "tok_s": 71.89,
+   "spec": {
+    "spec_accept_rate": 0.9111111111111111,
+    "spec_accept_length": 5.555555555555555,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 41,
+    "spec_num_proposed_drafts": 45,
+    "spec_verify_ct": 9,
+    "spec_correct_drafts_histogram": [
+     0,
+     1,
+     0,
+     0,
+     0,
+     8
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_dedupe",
+   "category": "code",
+   "content": "```python\ndef dedupe(xs):\n    seen = set()\n    result = []\n    for x in xs:\n        if x not in seen:\n            seen.add(x)\n            result.append(x)\n    return result\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 48,
+   "seconds": 0.66,
+   "tok_s": 72.68,
+   "spec": {
+    "spec_accept_rate": 1.0,
+    "spec_accept_length": 6.0,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 40,
+    "spec_num_proposed_drafts": 40,
+    "spec_verify_ct": 8,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     8
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_camel_to_snake",
+   "category": "code",
+   "content": "```python\ndef camel_to_snake(s):\n    if not s:\n        return \"\"\n    result = []\n    for i, ch in enumerate(s):\n        if ch.isupper():\n            if i > 0 and (s[i-1].islower() or (i + 1 < len(s) and s[i+1].islower())):\n                result.append('_')\n            result.append(ch.lower())\n        else:\n            result.append(ch)\n    return ''.join(result)\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 101,
+   "seconds": 1.275,
+   "tok_s": 79.21,
+   "spec": {
+    "spec_accept_rate": 0.8,
+    "spec_accept_length": 5.05,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 80,
+    "spec_num_proposed_drafts": 100,
+    "spec_verify_ct": 20,
+    "spec_correct_drafts_histogram": [
+     1,
+     3,
+     1,
+     0,
+     0,
+     15
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_divisor_sum",
+   "category": "code",
+   "content": "```python\ndef divisor_sum(n):\n    if n is None:\n        return 0\n    try:\n        n = int(n)\n    except (TypeError, ValueError):\n        return 0\n    if n <= 0:\n        return 0\n    total = 0\n    i = 1\n    while i * i <= n:\n        if n % i == 0:\n            total += i\n            if i != n // i:\n                total += n // i\n        i += 1\n    return total\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 114,
+   "seconds": 1.323,
+   "tok_s": 86.17,
+   "spec": {
+    "spec_accept_rate": 0.94,
+    "spec_accept_length": 5.7,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 94,
+    "spec_num_proposed_drafts": 100,
+    "spec_verify_ct": 20,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     1,
+     1,
+     1,
+     17
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_levenshtein",
+   "category": "code",
+   "content": "```python\ndef levenshtein(a, b):\n    if a == b:\n        return 0\n    if not a:\n        return len(b)\n    if not b:\n        return len(a)\n    if len(a) < len(b):\n        a, b = b, a\n    previous = list(range(len(b) + 1))\n    for i, ca in enumerate(a, 1):\n        current = [i]\n        for j, cb in enumerate(b, 1):\n            insert = current[j - 1] + 1\n            delete = previous[j] + 1\n            substitute = previous[j - 1] + (ca != cb)\n            current.append(min(insert, delete, substitute))\n        previous = current\n    return previous[-1]\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 164,
+   "seconds": 1.841,
+   "tok_s": 89.09,
+   "spec": {
+    "spec_accept_rate": 0.8933333333333333,
+    "spec_accept_length": 5.466666666666667,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 134,
+    "spec_num_proposed_drafts": 150,
+    "spec_verify_ct": 30,
+    "spec_correct_drafts_histogram": [
+     0,
+     2,
+     1,
+     2,
+     1,
+     24
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_group_anagrams",
+   "category": "code",
+   "content": "```python\ndef group_anagrams(words):\n    if not words:\n        return []\n    groups = {}\n    for word in words:\n        key = tuple(sorted(word))\n        groups.setdefault(key, []).append(word)\n    result = [sorted(group) for group in groups.values()]\n    result.sort(key=lambda g: g[0])\n    return result\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 76,
+   "seconds": 0.978,
+   "tok_s": 77.67,
+   "spec": {
+    "spec_accept_rate": 0.8857142857142857,
+    "spec_accept_length": 5.428571428571429,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 62,
+    "spec_num_proposed_drafts": 70,
+    "spec_verify_ct": 14,
+    "spec_correct_drafts_histogram": [
+     1,
+     0,
+     0,
+     0,
+     3,
+     10
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_two_sum",
+   "category": "code",
+   "content": "```python\ndef two_sum(xs, target):\n    seen = {}\n    for j, x in enumerate(xs):\n        complement = target - x\n        if complement in seen:\n            return (seen[complement], j)\n        if x not in seen:\n            seen[x] = j\n    return None\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 68,
+   "seconds": 1.022,
+   "tok_s": 66.56,
+   "spec": {
+    "spec_accept_rate": 0.7571428571428571,
+    "spec_accept_length": 4.857142857142857,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 53,
+    "spec_num_proposed_drafts": 70,
+    "spec_verify_ct": 14,
+    "spec_correct_drafts_histogram": [
+     2,
+     0,
+     2,
+     0,
+     1,
+     9
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_rotate90",
+   "category": "code",
+   "content": "```python\ndef rotate90(m):\n    if not m:\n        return []\n    n = len(m)\n    return [[m[n - 1 - j][i] for j in range(n)] for i in range(n)]\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 49,
+   "seconds": 0.679,
+   "tok_s": 72.18,
+   "spec": {
+    "spec_accept_rate": 0.8666666666666667,
+    "spec_accept_length": 5.444444444444445,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 39,
+    "spec_num_proposed_drafts": 45,
+    "spec_verify_ct": 9,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     2,
+     0,
+     0,
+     7
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_valid_ipv4",
+   "category": "code",
+   "content": "```python\ndef valid_ipv4(s):\n    if not isinstance(s, str) or not s:\n        return False\n    parts = s.split('.')\n    if len(parts) != 4:\n        return False\n    for part in parts:\n        if not part or not part.isdigit():\n            return False\n        if len(part) > 1 and part[0] == '0':\n            return False\n        if int(part) > 255:\n            return False\n    return True\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 109,
+   "seconds": 1.267,
+   "tok_s": 86.02,
+   "spec": {
+    "spec_accept_rate": 0.9473684210526315,
+    "spec_accept_length": 5.7368421052631575,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 90,
+    "spec_num_proposed_drafts": 95,
+    "spec_verify_ct": 19,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     1,
+     1,
+     0,
+     17
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_parse_query",
+   "category": "code",
+   "content": "```python\ndef parse_query(qs):\n    result = {}\n    if not qs:\n        return result\n    if qs.startswith('?'):\n        qs = qs[1:]\n    if not qs:\n        return result\n    for pair in qs.split('&'):\n        if not pair:\n            continue\n        if '=' in pair:\n            key, value = pair.split('=', 1)\n        else:\n            key, value = pair, ''\n        if key in result:\n            if isinstance(result[key], list):\n                result[key].append(value)\n            else:\n                result[key] = [result[key], value]\n        else:\n            result[key] = value\n    return result\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 150,
+   "seconds": 1.823,
+   "tok_s": 82.29,
+   "spec": {
+    "spec_accept_rate": 0.8344827586206897,
+    "spec_accept_length": 5.172413793103448,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 121,
+    "spec_num_proposed_drafts": 145,
+    "spec_verify_ct": 29,
+    "spec_correct_drafts_histogram": [
+     2,
+     1,
+     3,
+     0,
+     1,
+     22
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_kth_largest",
+   "category": "code",
+   "content": "```python\ndef kth_largest(xs, k):\n    if not xs or k < 1 or k > len(xs):\n        return None\n    return sorted(xs, reverse=True)[k - 1]\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 49,
+   "seconds": 0.786,
+   "tok_s": 62.38,
+   "spec": {
+    "spec_accept_rate": 0.8888888888888888,
+    "spec_accept_length": 5.444444444444445,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 40,
+    "spec_num_proposed_drafts": 45,
+    "spec_verify_ct": 9,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     1,
+     0,
+     2,
+     6
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_spiral",
+   "category": "code",
+   "content": "```python\ndef spiral(m):\n    if not m or not m[0]:\n        return []\n    result = []\n    top, bottom = 0, len(m) - 1\n    left, right = 0, len(m[0]) - 1\n    while top <= bottom and left <= right:\n        for j in range(left, right + 1):\n            result.append(m[top][j])\n        top += 1\n        for i in range(top, bottom + 1):\n            result.append(m[i][right])\n        right -= 1\n        if top <= bottom:\n            for j in range(right, left - 1, -1):\n                result.append(m[bottom][j])\n            bottom -= 1\n        if left <= right:\n            for i in range(bottom, top - 1, -1):\n                result.append(m[i][left])\n            left += 1\n    return result\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 197,
+   "seconds": 2.187,
+   "tok_s": 90.08,
+   "spec": {
+    "spec_accept_rate": 0.9588235294117647,
+    "spec_accept_length": 5.794117647058823,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 163,
+    "spec_num_proposed_drafts": 170,
+    "spec_verify_ct": 34,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     1,
+     1,
+     2,
+     30
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_word_wrap",
+   "category": "code",
+   "content": "```python\ndef word_wrap(text, width):\n    if width <= 0:\n        raise ValueError(\"width must be positive\")\n    words = text.split()\n    if not words:\n        return []\n    lines = []\n    current = words[0]\n    for word in words[1:]:\n        if len(current) + 1 + len(word) <= width:\n            current += \" \" + word\n        else:\n            lines.append(current)\n            current = word\n    lines.append(current)\n    return lines\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 108,
+   "seconds": 1.284,
+   "tok_s": 84.08,
+   "spec": {
+    "spec_accept_rate": 0.9368421052631579,
+    "spec_accept_length": 5.684210526315789,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 89,
+    "spec_num_proposed_drafts": 95,
+    "spec_verify_ct": 19,
+    "spec_correct_drafts_histogram": [
+     0,
+     1,
+     0,
+     1,
+     0,
+     17
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "code_interval_intersect",
+   "category": "code",
+   "content": "```python\ndef interval_intersect(a, b):\n    result = []\n    i = j = 0\n    while i < len(a) and j < len(b):\n        lo = max(a[i][0], b[j][0])\n        hi = min(a[i][1], b[j][1])\n        if lo <= hi:\n            result.append((lo, hi))\n        if a[i][1] < b[j][1]:\n            i += 1\n        else:\n            j += 1\n    return result\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 113,
+   "seconds": 1.417,
+   "tok_s": 79.76,
+   "spec": {
+    "spec_accept_rate": 0.8272727272727273,
+    "spec_accept_length": 5.136363636363637,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 91,
+    "spec_num_proposed_drafts": 110,
+    "spec_verify_ct": 22,
+    "spec_correct_drafts_histogram": [
+     3,
+     1,
+     0,
+     0,
+     0,
+     18
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": false,
+   "why": "AssertionError"
+  },
+  {
+   "id": "code_base_to_int",
+   "category": "code",
+   "content": "```python\ndef base_to_int(s, base):\n    if not 2 <= base <= 36:\n        raise ValueError(\"base must be between 2 and 36\")\n    if not s:\n        raise ValueError(\"empty string\")\n    digits = \"0123456789abcdefghijklmnopqrstuvwxyz\"\n    result = 0\n    for ch in s.lower():\n        val = digits.find(ch)\n        if val == -1 or val >= base:\n            raise ValueError(f\"invalid digit {ch!r} for base {base}\")\n        result = result * base + val\n    return result\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 131,
+   "seconds": 1.56,
+   "tok_s": 83.98,
+   "spec": {
+    "spec_accept_rate": 0.84,
+    "spec_accept_length": 5.24,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 105,
+    "spec_num_proposed_drafts": 125,
+    "spec_verify_ct": 25,
+    "spec_correct_drafts_histogram": [
+     1,
+     0,
+     4,
+     1,
+     1,
+     18
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "json_manifest",
+   "category": "json",
+   "content": "{\"name\":\"forgebuild\",\"version\":\"2.4.1\",\"deps\":[\"libcore>=1.8\",\"taskgraph\",\"cachekit\"],\"stable\":true,\"max_workers\":4}",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 43,
+   "seconds": 1.107,
+   "tok_s": 38.85,
+   "spec": {
+    "spec_accept_rate": 0.3375,
+    "spec_accept_length": 2.6875,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 27,
+    "spec_num_proposed_drafts": 80,
+    "spec_verify_ct": 16,
+    "spec_correct_drafts_histogram": [
+     7,
+     2,
+     2,
+     1,
+     2,
+     2
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "json_nested",
+   "category": "json",
+   "content": "{\n  \"host\": \"api.example.com\",\n  \"port\": 8443,\n  \"tls\": {\n    \"enabled\": true,\n    \"min_version\": \"1.2\"\n  },\n  \"routes\": [\n    {\n      \"path\": \"/users\",\n      \"methods\": [\"GET\", \"POST\"]\n    },\n    {\n      \"path\": \"/orders\",\n      \"methods\": [\"GET\", \"PUT\", \"DELETE\"]\n    }\n  ]\n}",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 97,
+   "seconds": 1.235,
+   "tok_s": 78.54,
+   "spec": {
+    "spec_accept_rate": 0.8777777777777778,
+    "spec_accept_length": 5.388888888888889,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 79,
+    "spec_num_proposed_drafts": 90,
+    "spec_verify_ct": 18,
+    "spec_correct_drafts_histogram": [
+     1,
+     0,
+     1,
+     1,
+     1,
+     14
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "json_toolcall",
+   "category": "json",
+   "content": "{\"name\": \"book_restaurant_table\", \"arguments\": {\"restaurant\": \"Kappa\", \"party_size\": 4, \"time\": \"7pm tomorrow\"}}",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 38,
+   "seconds": 0.681,
+   "tok_s": 55.83,
+   "spec": {
+    "spec_accept_rate": 0.75,
+    "spec_accept_length": 4.75,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 30,
+    "spec_num_proposed_drafts": 40,
+    "spec_verify_ct": 8,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     3,
+     0,
+     1,
+     4
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "json_escape",
+   "category": "json",
+   "content": "{\"text\": \"She said \\\"hi\\\\there\\\" \u2014 twice.\", \"len\": 27}",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 21,
+   "seconds": 0.543,
+   "tok_s": 38.7,
+   "spec": {
+    "spec_accept_rate": 0.5,
+    "spec_accept_length": 3.5,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 15,
+    "spec_num_proposed_drafts": 30,
+    "spec_verify_ct": 6,
+    "spec_correct_drafts_histogram": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": false,
+   "why": "len does not match text length"
+  },
+  {
+   "id": "json_sort",
+   "category": "json",
+   "content": "[{\"name\":\"di\",\"score\":9},{\"name\":\"al\",\"score\":7},{\"name\":\"bo\",\"score\":3},{\"name\":\"cy\",\"score\":3}]",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 35,
+   "seconds": 0.559,
+   "tok_s": 62.58,
+   "spec": {
+    "spec_accept_rate": 0.9333333333333333,
+    "spec_accept_length": 5.833333333333333,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 28,
+    "spec_num_proposed_drafts": 30,
+    "spec_verify_ct": 6,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     0,
+     1,
+     0,
+     5
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "json_types",
+   "category": "json",
+   "content": "{\"a\":0,\"b\":false,\"c\":null,\"d\":[],\"e\":\"\"}",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 22,
+   "seconds": 0.441,
+   "tok_s": 49.87,
+   "spec": {
+    "spec_accept_rate": 0.9,
+    "spec_accept_length": 5.5,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 18,
+    "spec_num_proposed_drafts": 20,
+    "spec_verify_ct": 4,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     0,
+     1,
+     0,
+     3
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "json_count",
+   "category": "json",
+   "content": "Let's count the vowels in \"Encyclopaedia Britannica\" (case-insensitive).\n\n**Encyclopaedia**  \nE, n, c, y, c, l, o, p, a, e, d, i, a  \nVowels: E, o, a, e, i, a \u2192 6\n\n**Britannica**  \nB, r, i, t, a, n, n, i, c, a  \nVowels: i, a, i, a \u2192 4\n\nTotal: 6 + 4 = 10\n\n{\"vowels\": 10}",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 125,
+   "seconds": 1.523,
+   "tok_s": 82.09,
+   "spec": {
+    "spec_accept_rate": 0.7538461538461538,
+    "spec_accept_length": 4.8076923076923075,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 98,
+    "spec_num_proposed_drafts": 130,
+    "spec_verify_ct": 26,
+    "spec_correct_drafts_histogram": [
+     2,
+     1,
+     4,
+     2,
+     2,
+     15
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "json_strict_empty",
+   "category": "json",
+   "content": "{\"alpha\": 5, \"beta\": 4, \"gamma\": 5}",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 19,
+   "seconds": 0.422,
+   "tok_s": 44.99,
+   "spec": {
+    "spec_accept_rate": 0.75,
+    "spec_accept_length": 4.75,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 15,
+    "spec_num_proposed_drafts": 20,
+    "spec_verify_ct": 4,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     1,
+     1,
+     0,
+     2
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "math_m1",
+   "category": "math",
+   "content": "Let's go step-by-step.\n\n1. **First multiplication**:  \n\\( 17 \\times 243 \\)  \n\\( 17 \\times 200 = 3400 \\)  \n\\( 17 \\times 40 = 680 \\)  \n\\( 17 \\times 3 = 51 \\)  \nSum: \\( 3400 + 680 = 4080 \\), then \\( 4080 + 51 = 4131 \\).\n\n2. **Exponentiation**:  \n\\( 5^4 = 625 \\).\n\n3. **Add the results from steps 1 and 2**:  \n\\( 4131 + 625 = 4756 \\).\n\n4. **Subtract 1000**:  \n\\( 4756 - 1000 = 3756 \\).\n\nFinal number:\n\n\\[\n\\boxed{3756}\n\\]",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 173,
+   "seconds": 2.203,
+   "tok_s": 78.55,
+   "spec": {
+    "spec_accept_rate": 0.6871794871794872,
+    "spec_accept_length": 4.435897435897436,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 134,
+    "spec_num_proposed_drafts": 195,
+    "spec_verify_ct": 39,
+    "spec_correct_drafts_histogram": [
+     5,
+     4,
+     4,
+     3,
+     2,
+     21
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "math_m2",
+   "category": "math",
+   "content": "Let's go step-by-step.\n\n**Step 1: Total distance**  \nFirst part: 315 km  \nSecond part: 210 km  \nTotal distance = 315 + 210 = 525 km\n\n**Step 2: Total time**  \nFirst part: 3.5 hours  \nSecond part: 2 hours  \nTotal time = 3.5 + 2 = 5.5 hours\n\n**Step 3: Average speed**  \nAverage speed = total distance \u00f7 total time  \n= 525 \u00f7 5.5  \n= 95.4545... km/h\n\nIf we want a precise fraction:  \n525 \u00f7 5.5 = 525 \u00f7 (11/2) = 525 \u00d7 (2/11) = 1050/11 \u2248 95.45 km/h\n\n**Final answer (rounded to two decimals):**\n\n95.45",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 182,
+   "seconds": 2.383,
+   "tok_s": 76.38,
+   "spec": {
+    "spec_accept_rate": 0.6666666666666666,
+    "spec_accept_length": 4.333333333333333,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 140,
+    "spec_num_proposed_drafts": 210,
+    "spec_verify_ct": 42,
+    "spec_correct_drafts_histogram": [
+     5,
+     5,
+     7,
+     1,
+     2,
+     22
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "math_m3",
+   "category": "math",
+   "content": "Alright, let's go step-by-step.\n\nWe want integers from 1 to 200 that are divisible by 7.\n\n---\n\n**Step 1: Identify the sequence**  \nThe smallest multiple of 7 in the range is \\( 7 \\times 1 = 7 \\).  \nThe largest multiple of 7 \u2264 200:  \n\\( 7 \\times 28 = 196 \\) (since \\( 7 \\times 29 = 203 > 200 \\)).\n\nSo the multiples are:  \n\\( 7, 14, 21, \\dots, 196 \\).\n\n---\n\n**Step 2: Count the terms**  \nThis is an arithmetic sequence with first term \\(a = 7\\), last term \\(l = 196\\), common difference \\(d = 7\\).  \nNumber of terms:  \n\\( n = \\frac{196 - 7}{7} + 1 = \\frac{189}{7} + 1 = 27 + 1 = 28 \\).\n\n---\n\n**Step 3: Sum the sequence**  \nSum of arithmetic sequence:  \n\\( S = \\frac{n}{2} (a + l) = \\frac{28}{2} (7 + 196) = 14 \\times 203 \\).\n\n\\( 14 \\times 203 = 14 \\times 200 + 14 \\times 3 = 2800 + 42 = 2842 \\).\n\n---\n\n**Step 4: Final answer**  \n2842\n\n---\n\n2842",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 311,
+   "seconds": 3.618,
+   "tok_s": 85.97,
+   "spec": {
+    "spec_accept_rate": 0.7283582089552239,
+    "spec_accept_length": 4.641791044776119,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 244,
+    "spec_num_proposed_drafts": 335,
+    "spec_verify_ct": 67,
+    "spec_correct_drafts_histogram": [
+     6,
+     5,
+     9,
+     4,
+     6,
+     37
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "math_m4",
+   "category": "math",
+   "content": "Let the sides be \\( l \\) and \\( w \\), with \\( l > w \\).\n\nWe know:\n\n\\[\n2l + 2w = 46\n\\]\n\\[\nl + w = 23\n\\]\n\nArea:\n\n\\[\nlw = 120\n\\]\n\nFrom \\( l + w = 23 \\), we have \\( w = 23 - l \\).\n\nSubstitute into area:\n\n\\[\nl(23 - l) = 120\n\\]\n\\[\n23l - l^2 = 120\n\\]\n\\[\nl^2 - 23l + 120 = 0\n\\]\n\nSolve:\n\n\\[\nl = \\frac{23 \\pm \\sqrt{23^2 - 4 \\cdot 120}}{2}\n= \\frac{23 \\pm \\sqrt{529 - 480}}{2}\n= \\frac{23 \\pm \\sqrt{49}}{2}\n= \\frac{23 \\pm 7}{2}\n\\]\n\nSo:\n\n\\[\nl = \\frac{30}{2} = 15 \\quad \\text{or} \\quad l = \\frac{16}{2} = 8\n\\]\n\nLonger side is \\( 15 \\).\n\n\\[\n\\boxed{15}\n\\]",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 258,
+   "seconds": 3.007,
+   "tok_s": 85.8,
+   "spec": {
+    "spec_accept_rate": 0.7381818181818182,
+    "spec_accept_length": 4.6909090909090905,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 203,
+    "spec_num_proposed_drafts": 275,
+    "spec_verify_ct": 55,
+    "spec_correct_drafts_histogram": [
+     5,
+     8,
+     2,
+     3,
+     3,
+     34
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "math_m5",
+   "category": "math",
+   "content": "We want the greatest common divisor of \\(1071\\) and \\(462\\).\n\nUsing the Euclidean algorithm:\n\n\\[\n1071 = 462 \\times 2 + 147\n\\]\n\\[\n462 = 147 \\times 3 + 21\n\\]\n\\[\n147 = 21 \\times 7 + 0\n\\]\n\nThe last nonzero remainder is \\(21\\).\n\n\\[\n\\boxed{21}\n\\]",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 86,
+   "seconds": 1.009,
+   "tok_s": 85.23,
+   "spec": {
+    "spec_accept_rate": 0.875,
+    "spec_accept_length": 5.375,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 70,
+    "spec_num_proposed_drafts": 80,
+    "spec_verify_ct": 16,
+    "spec_correct_drafts_histogram": [
+     1,
+     0,
+     0,
+     2,
+     1,
+     12
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "math_m6",
+   "category": "math",
+   "content": "Let's go step-by-step.\n\n**Step 1: Find the painting rate per painter.**  \n3 painters paint 5 rooms in 8 hours.  \nSo, 3 painters\u2019 rate = \\( \\frac{5 \\text{ rooms}}{8 \\text{ hours}} = 0.625 \\) rooms/hour for 3 painters.  \n\nFor 1 painter: \\( 0.625 / 3 = \\frac{5}{24} \\) rooms/hour.\n\n---\n\n**Step 2: Find the rate for 5 painters.**  \n5 painters\u2019 rate = \\( 5 \\times \\frac{5}{24} = \\frac{25}{24} \\) rooms/hour.\n\n---\n\n**Step 3: Find time for 12 rooms.**  \nTime = \\( \\frac{12}{\\frac{25}{24}} = 12 \\times \\frac{24}{25} = \\frac{288}{25} = 11.52 \\) hours.\n\n---\n\n**Final answer:**  \n11.52",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 205,
+   "seconds": 2.663,
+   "tok_s": 76.98,
+   "spec": {
+    "spec_accept_rate": 0.6541666666666667,
+    "spec_accept_length": 4.270833333333333,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 157,
+    "spec_num_proposed_drafts": 240,
+    "spec_verify_ct": 48,
+    "spec_correct_drafts_histogram": [
+     8,
+     3,
+     3,
+     10,
+     2,
+     22
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "math_m7",
+   "category": "math",
+   "content": "2**20 = 1,048,576  \n3**10 = 59,049  \n\n1,048,576 - 59,049 = 989,527  \n\n989527",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 39,
+   "seconds": 0.583,
+   "tok_s": 66.89,
+   "spec": {
+    "spec_accept_rate": 0.775,
+    "spec_accept_length": 4.875,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 31,
+    "spec_num_proposed_drafts": 40,
+    "spec_verify_ct": 8,
+    "spec_correct_drafts_histogram": [
+     0,
+     1,
+     0,
+     1,
+     3,
+     3
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "math_m8",
+   "category": "math",
+   "content": "Let's go step-by-step.\n\n1. Let the original price be \\( x \\).\n2. After a 20% discount, the price is \\( 0.8x \\).\n3. Then a further 10% off at the till means multiplying by 0.9:  \n   \\( 0.8x \\times 0.9 = 0.72x \\).\n4. We know the final price is 80:  \n   \\( 0.72x = 80 \\).\n5. Solve:  \n   \\( x = \\frac{80}{0.72} = \\frac{8000}{72} = \\frac{1000}{9} \\approx 111.11\\).\n\nSo the original price was \\( \\frac{1000}{9} \\) or about 111.11.\n\n**111.11**",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 175,
+   "seconds": 2.22,
+   "tok_s": 78.83,
+   "spec": {
+    "spec_accept_rate": 0.6974358974358974,
+    "spec_accept_length": 4.487179487179487,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 136,
+    "spec_num_proposed_drafts": 195,
+    "spec_verify_ct": 39,
+    "spec_correct_drafts_histogram": [
+     5,
+     5,
+     2,
+     3,
+     2,
+     22
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "math_m9",
+   "category": "math",
+   "content": "Let's go step-by-step.\n\n**Step 1: Understand the problem**  \nWe have the word **BANANA**.  \nLetters: B, A, N, A, N, A.  \nCounts:  \n- A: 3  \n- N: 2  \n- B: 1  \n\nWe want **distinct 4-letter strings** using each letter at most as often as it appears in BANANA.  \nThat means:  \n- A can be used up to 3 times  \n- N can be used up to 2 times  \n- B can be used up to 1 time  \n\nWe are forming length-4 strings.\n\n---\n\n**Step 2: Possible cases by letter composition**  \nWe can break into cases based on how many A's, N's, and B's we use.\n\nLet \\(a\\) = number of A's, \\(n\\) = number of N's, \\(b\\) = number of B's.  \nWe have \\(a + n + b = 4\\), with \\(0 \\le a \\le 3\\), \\(0 \\le n \\le 2\\), \\(0 \\le b \\le 1\\).\n\n---\n\n**Step 3: Enumerate valid (a, n, b) triples**  \n\nSince \\(b\\) is 0 or 1:\n\n**Case b = 0:**  \nThen \\(a + n = 4\\), with \\(a \\le 3\\), \\(n \\le 2\\).  \nPossible n values: 0,1,2.  \n- n=0 \u2192 a=4 (invalid, a>3)  \n- n=1 \u2192 a=3 (valid)  \n- n=2 \u2192 a=2 (valid)  \n\nSo: (3,1,0) and (2,2,0).\n\n**Case b = 1:**  \nThen \\(a + n = 3\\), with \\(a \\le 3\\), \\(n \\le 2\\).  \nPossible n: 0,1,2.  \n- n=0 \u2192 a=3 (valid)  \n- n=1 \u2192 a=2 (valid)  \n- n=2 \u2192 a=1 (valid)  \n\nSo: (3,0,1), (2,1,1), (1,2,1).\n\n---\n\n**Step 4: Count permutations for each case**  \n\nFormula: For a given multiset with counts (a, n, b), number of distinct permutations = \\( \\frac{4!}{a! \\, n! \\, b!} \\).\n\n1. (3,1,0): \\(4!/(3!1!0!) = 24/(6*1*1) = 4\\)  \n2. (2,2,0): \\(24/(2!2!0!) = 24/(2*2*1) = 6\\)  \n3. (3,0,1): \\(24/(3!0!1!) = 24/(6*1*1) = 4\\)  \n4. (2,1,1): \\(24",
+   "reasoning_chars": 0,
+   "finish_reason": "length",
+   "completion_tokens": 640,
+   "seconds": 7.964,
+   "tok_s": 80.37,
+   "spec": {
+    "spec_accept_rate": 0.6951048951048951,
+    "spec_accept_length": 4.475524475524476,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 497,
+    "spec_num_proposed_drafts": 715,
+    "spec_verify_ct": 143,
+    "spec_correct_drafts_histogram": [
+     20,
+     9,
+     14,
+     12,
+     16,
+     72
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": false,
+   "why": "got 24.0, want 38.0"
+  },
+  {
+   "id": "math_m10",
+   "category": "math",
+   "content": "Let's examine the sequence:  \n\n2, 6, 12, 20, 30, ...  \n\nThe differences are:  \n6 - 2 = 4  \n12 - 6 = 6  \n20 - 12 = 8  \n30 - 20 = 10  \n\nThe differences increase by 2 each time.  \nSo the next differences will be 12, 14, 16, etc.\n\nThis sequence is actually \\( n(n+1) \\):  \n1\u00d72 = 2  \n2\u00d73 = 6  \n3\u00d74 = 12  \n4\u00d75 = 20  \n5\u00d76 = 30  \n\nSo the 12th term is \\( 12 \\times 13 = 156 \\).\n\n**156**",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 158,
+   "seconds": 2.217,
+   "tok_s": 71.27,
+   "spec": {
+    "spec_accept_rate": 0.6102564102564103,
+    "spec_accept_length": 4.051282051282051,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 119,
+    "spec_num_proposed_drafts": 195,
+    "spec_verify_ct": 39,
+    "spec_correct_drafts_histogram": [
+     6,
+     4,
+     8,
+     2,
+     2,
+     17
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "math_m11",
+   "category": "math",
+   "content": "Alright, let's go step-by-step.\n\nWe want \\( 7^{100} \\mod 13 \\).\n\n---\n\n**Step 1: Use Fermat's Little Theorem**\n\nFermat's Little Theorem says: if \\(p\\) is prime and \\(\\gcd(a, p) = 1\\), then  \n\\[\na^{p-1} \\equiv 1 \\pmod{p}.\n\\]\n\nHere \\(p = 13\\), \\(a = 7\\), and \\(\\gcd(7, 13) = 1\\).\n\nSo:\n\\[\n7^{12} \\equiv 1 \\pmod{13}.\n\\]\n\n---\n\n**Step 2: Reduce the exponent**\n\nWe have \\(100\\) as the exponent. Divide by 12:\n\n\\(100 = 12 \\times 8 + 4\\).\n\nSo:\n\\[\n7^{100} = 7^{12 \\times 8 + 4} = (7^{12})^8 \\cdot 7^4.\n\\]\n\nFrom Fermat's theorem, \\(7^{12} \\equiv 1\\), so \\((7^{12})^8 \\equiv 1^8 \\equiv 1\\).\n\nThus:\n\\[\n7^{100} \\equiv 7^4 \\pmod{13}.\n\\]\n\n---\n\n**Step 3: Compute \\(7^4 \\mod 13\\)**\n\nFirst, \\(7^2 = 49\\).\n\n\\(49 \\mod 13\\): \\(13 \\times 3 = 39\\), remainder \\(10\\).  \nSo \\(7^2 \\equiv 10 \\pmod{13}\\).\n\nThen \\(7^4 = (7^2)^2 \\equiv 10^2 = 100 \\pmod{13}\\).\n\n\\(100 \\mod 13\\): \\(13 \\times 7 = 91\\), remainder \\(9\\).\n\nSo \\(7^4 \\equiv 9 \\pmod{13}\\).\n\n---\n\n**Step 4: Conclusion**\n\nTherefore:\n\\[\n7^{100} \\equiv 9 \\pmod{13}.\n\\]\n\n---\n\n**Final answer:**\n```\n9\n```",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 422,
+   "seconds": 4.986,
+   "tok_s": 84.64,
+   "spec": {
+    "spec_accept_rate": 0.7075268817204301,
+    "spec_accept_length": 4.537634408602151,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 329,
+    "spec_num_proposed_drafts": 465,
+    "spec_verify_ct": 93,
+    "spec_correct_drafts_histogram": [
+     8,
+     11,
+     8,
+     10,
+     8,
+     48
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "math_m12",
+   "category": "math",
+   "content": "The number of distinct ways to seat 8 people around a round table, with rotations considered identical, is:\n\n\\[\n(8-1)! = 7! = 5040\n\\]\n\n**5040**",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 44,
+   "seconds": 0.751,
+   "tok_s": 58.57,
+   "spec": {
+    "spec_accept_rate": 0.6,
+    "spec_accept_length": 4.0,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 33,
+    "spec_num_proposed_drafts": 55,
+    "spec_verify_ct": 11,
+    "spec_correct_drafts_histogram": [
+     0,
+     2,
+     4,
+     1,
+     0,
+     4
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "math_m13",
+   "category": "math",
+   "content": "Let's go step-by-step.\n\n**Step 1: Identify given values**  \nRadius \\( r = 3 \\)  \nHeight \\( h = 4 \\)  \n\u03c0 = 3.14159\n\n**Step 2: Find slant height**  \nSlant height \\( l = \\sqrt{r^2 + h^2} = \\sqrt{3^2 + 4^2} = \\sqrt{9 + 16} = \\sqrt{25} = 5 \\)\n\n**Step 3: Total surface area formula**  \nTotal surface area = base area + lateral area  \nBase area = \\( \\pi r^2 = \\pi (3^2) = 9\\pi \\)  \nLateral area = \\( \\pi r l = \\pi (3)(5) = 15\\pi \\)  \nTotal = \\( 9\\pi + 15\\pi = 24\\pi \\)\n\n**Step 4: Calculate numerical value**  \n\\( 24 \\times 3.14159 = 75.39816 \\)\n\n**Step 5: Round to two decimal places**  \n75.40\n\n**Final answer:**  \n75.40",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 236,
+   "seconds": 2.74,
+   "tok_s": 86.12,
+   "spec": {
+    "spec_accept_rate": 0.763265306122449,
+    "spec_accept_length": 4.816326530612245,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 187,
+    "spec_num_proposed_drafts": 245,
+    "spec_verify_ct": 49,
+    "spec_correct_drafts_histogram": [
+     3,
+     6,
+     3,
+     3,
+     4,
+     30
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "math_m14",
+   "category": "math",
+   "content": "Let's go step-by-step.\n\n**Step 1: Rates of each pipe**\n\n- First pipe fills in 12 minutes \u2192 rate = \\( \\frac{1}{12} \\) tank per minute.\n- Second pipe fills in 18 minutes \u2192 rate = \\( \\frac{1}{18} \\) tank per minute.\n- Drain empties in 36 minutes \u2192 rate = \\( -\\frac{1}{36} \\) tank per minute.\n\n**Step 2: Combined rate**\n\n\\[\n\\frac{1}{12} + \\frac{1}{18} - \\frac{1}{36}\n\\]\n\nCommon denominator for 12, 18, 36 is 36.\n\n\\[\n\\frac{3}{36} + \\frac{2}{36} - \\frac{1}{36} = \\frac{4}{36} = \\frac{1}{9}\n\\]\n\n**Step 3: Time to fill**\n\nIf the combined rate is \\( \\frac{1}{9} \\) tank per minute, time to fill 1 tank is \\( 9 \\) minutes.\n\n**Final answer:**\n9",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 225,
+   "seconds": 2.618,
+   "tok_s": 85.95,
+   "spec": {
+    "spec_accept_rate": 0.7574468085106383,
+    "spec_accept_length": 4.787234042553192,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 178,
+    "spec_num_proposed_drafts": 235,
+    "spec_verify_ct": 47,
+    "spec_correct_drafts_histogram": [
+     4,
+     3,
+     3,
+     6,
+     4,
+     27
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "reason_r1",
+   "category": "reason",
+   "content": "23",
+   "reasoning_chars": 452,
+   "finish_reason": "stop",
+   "completion_tokens": 140,
+   "seconds": 2.359,
+   "tok_s": 59.34,
+   "spec": {
+    "spec_accept_rate": 0.5,
+    "spec_accept_length": 3.5,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 100,
+    "spec_num_proposed_drafts": 200,
+    "spec_verify_ct": 40,
+    "spec_correct_drafts_histogram": [
+     8,
+     6,
+     7,
+     5,
+     5,
+     9
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "reason_r2",
+   "category": "reason",
+   "content": "MIXED",
+   "reasoning_chars": 737,
+   "finish_reason": "stop",
+   "completion_tokens": 197,
+   "seconds": 3.302,
+   "tok_s": 59.66,
+   "spec": {
+    "spec_accept_rate": 0.49122807017543857,
+    "spec_accept_length": 3.456140350877193,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 140,
+    "spec_num_proposed_drafts": 285,
+    "spec_verify_ct": 57,
+    "spec_correct_drafts_histogram": [
+     10,
+     11,
+     9,
+     8,
+     8,
+     11
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "reason_r3",
+   "category": "reason",
+   "content": "5",
+   "reasoning_chars": 110,
+   "finish_reason": "stop",
+   "completion_tokens": 29,
+   "seconds": 0.673,
+   "tok_s": 43.11,
+   "spec": {
+    "spec_accept_rate": 0.5,
+    "spec_accept_length": 3.625,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 20,
+    "spec_num_proposed_drafts": 40,
+    "spec_verify_ct": 8,
+    "spec_correct_drafts_histogram": [
+     2,
+     1,
+     1,
+     1,
+     1,
+     2
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "reason_r4",
+   "category": "reason",
+   "content": "0.05",
+   "reasoning_chars": 366,
+   "finish_reason": "stop",
+   "completion_tokens": 99,
+   "seconds": 1.635,
+   "tok_s": 60.56,
+   "spec": {
+    "spec_accept_rate": 0.5615384615384615,
+    "spec_accept_length": 3.8076923076923075,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 73,
+    "spec_num_proposed_drafts": 130,
+    "spec_verify_ct": 26,
+    "spec_correct_drafts_histogram": [
+     3,
+     4,
+     5,
+     3,
+     5,
+     6
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "reason_r5",
+   "category": "reason",
+   "content": "2",
+   "reasoning_chars": 250,
+   "finish_reason": "stop",
+   "completion_tokens": 63,
+   "seconds": 1.204,
+   "tok_s": 52.34,
+   "spec": {
+    "spec_accept_rate": 0.4888888888888889,
+    "spec_accept_length": 3.5,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 44,
+    "spec_num_proposed_drafts": 90,
+    "spec_verify_ct": 18,
+    "spec_correct_drafts_histogram": [
+     4,
+     3,
+     3,
+     1,
+     3,
+     4
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "reason_r6",
+   "category": "reason",
+   "content": "47",
+   "reasoning_chars": 187,
+   "finish_reason": "stop",
+   "completion_tokens": 50,
+   "seconds": 1.138,
+   "tok_s": 43.95,
+   "spec": {
+    "spec_accept_rate": 0.38823529411764707,
+    "spec_accept_length": 2.9411764705882355,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 33,
+    "spec_num_proposed_drafts": 85,
+    "spec_verify_ct": 17,
+    "spec_correct_drafts_histogram": [
+     4,
+     4,
+     3,
+     2,
+     3,
+     1
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "reason_r7",
+   "category": "reason",
+   "content": "2",
+   "reasoning_chars": 723,
+   "finish_reason": "stop",
+   "completion_tokens": 185,
+   "seconds": 3.541,
+   "tok_s": 52.24,
+   "spec": {
+    "spec_accept_rate": 0.4065573770491803,
+    "spec_accept_length": 3.0327868852459017,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 124,
+    "spec_num_proposed_drafts": 305,
+    "spec_verify_ct": 61,
+    "spec_correct_drafts_histogram": [
+     12,
+     17,
+     10,
+     8,
+     7,
+     7
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "reason_r8",
+   "category": "reason",
+   "content": "18",
+   "reasoning_chars": 1148,
+   "finish_reason": "stop",
+   "completion_tokens": 353,
+   "seconds": 5.319,
+   "tok_s": 66.37,
+   "spec": {
+    "spec_accept_rate": 0.5354166666666667,
+    "spec_accept_length": 3.6770833333333335,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 257,
+    "spec_num_proposed_drafts": 480,
+    "spec_verify_ct": 96,
+    "spec_correct_drafts_histogram": [
+     18,
+     18,
+     14,
+     6,
+     7,
+     33
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "reason_r9",
+   "category": "reason",
+   "content": "7.5",
+   "reasoning_chars": 366,
+   "finish_reason": "stop",
+   "completion_tokens": 116,
+   "seconds": 1.718,
+   "tok_s": 67.52,
+   "spec": {
+    "spec_accept_rate": 0.6285714285714286,
+    "spec_accept_length": 4.142857142857143,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 88,
+    "spec_num_proposed_drafts": 140,
+    "spec_verify_ct": 28,
+    "spec_correct_drafts_histogram": [
+     1,
+     8,
+     1,
+     4,
+     4,
+     10
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "reason_r10",
+   "category": "reason",
+   "content": "3",
+   "reasoning_chars": 430,
+   "finish_reason": "stop",
+   "completion_tokens": 99,
+   "seconds": 1.988,
+   "tok_s": 49.8,
+   "spec": {
+    "spec_accept_rate": 0.4,
+    "spec_accept_length": 3.0,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 66,
+    "spec_num_proposed_drafts": 165,
+    "spec_verify_ct": 33,
+    "spec_correct_drafts_histogram": [
+     11,
+     2,
+     9,
+     2,
+     5,
+     4
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "reason_r11",
+   "category": "reason",
+   "content": "The minimum is 7 one-way river crossings.\n\n7",
+   "reasoning_chars": 786,
+   "finish_reason": "stop",
+   "completion_tokens": 194,
+   "seconds": 3.367,
+   "tok_s": 57.62,
+   "spec": {
+    "spec_accept_rate": 0.4689655172413793,
+    "spec_accept_length": 3.3448275862068964,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 136,
+    "spec_num_proposed_drafts": 290,
+    "spec_verify_ct": 58,
+    "spec_correct_drafts_histogram": [
+     14,
+     9,
+     9,
+     7,
+     7,
+     12
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "reason_r12",
+   "category": "reason",
+   "content": "3",
+   "reasoning_chars": 973,
+   "finish_reason": "stop",
+   "completion_tokens": 238,
+   "seconds": 4.295,
+   "tok_s": 55.42,
+   "spec": {
+    "spec_accept_rate": 0.4236842105263158,
+    "spec_accept_length": 3.1315789473684212,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 161,
+    "spec_num_proposed_drafts": 380,
+    "spec_verify_ct": 76,
+    "spec_correct_drafts_histogram": [
+     17,
+     16,
+     13,
+     13,
+     5,
+     12
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "reason_r13",
+   "category": "reason",
+   "content": "1",
+   "reasoning_chars": 672,
+   "finish_reason": "stop",
+   "completion_tokens": 222,
+   "seconds": 3.633,
+   "tok_s": 61.1,
+   "spec": {
+    "spec_accept_rate": 0.48307692307692307,
+    "spec_accept_length": 3.4153846153846152,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 157,
+    "spec_num_proposed_drafts": 325,
+    "spec_verify_ct": 65,
+    "spec_correct_drafts_histogram": [
+     10,
+     20,
+     9,
+     2,
+     7,
+     17
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "reason_r14",
+   "category": "reason",
+   "content": "0.107",
+   "reasoning_chars": 144,
+   "finish_reason": "stop",
+   "completion_tokens": 55,
+   "seconds": 0.985,
+   "tok_s": 55.81,
+   "spec": {
+    "spec_accept_rate": 0.5714285714285714,
+    "spec_accept_length": 3.9285714285714284,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 40,
+    "spec_num_proposed_drafts": 70,
+    "spec_verify_ct": 14,
+    "spec_correct_drafts_histogram": [
+     2,
+     3,
+     1,
+     2,
+     1,
+     5
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "reason_r15",
+   "category": "reason",
+   "content": "TUESDAY",
+   "reasoning_chars": 261,
+   "finish_reason": "stop",
+   "completion_tokens": 90,
+   "seconds": 1.357,
+   "tok_s": 66.34,
+   "spec": {
+    "spec_accept_rate": 0.6181818181818182,
+    "spec_accept_length": 4.090909090909091,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 68,
+    "spec_num_proposed_drafts": 110,
+    "spec_verify_ct": 22,
+    "spec_correct_drafts_histogram": [
+     2,
+     2,
+     4,
+     3,
+     6,
+     5
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "reason_r16",
+   "category": "reason",
+   "content": "17",
+   "reasoning_chars": 1660,
+   "finish_reason": "stop",
+   "completion_tokens": 579,
+   "seconds": 9.259,
+   "tok_s": 62.54,
+   "spec": {
+    "spec_accept_rate": 0.46936416184971097,
+    "spec_accept_length": 3.346820809248555,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 406,
+    "spec_num_proposed_drafts": 865,
+    "spec_verify_ct": 173,
+    "spec_correct_drafts_histogram": [
+     42,
+     26,
+     29,
+     24,
+     10,
+     42
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "fmt_table",
+   "category": "format",
+   "content": "| step | command | why |\n| --- | --- | --- |\n| 1 | `ssh -L 8888:localhost:8888 user@remote-host` | Forwards local port 8888 to port 8888 on the remote host, creating the tunnel. |\n| 2 | `curl http://localhost:8888/api/endpoint` | Sends a request to the local port, which is tunneled to the remote API. |\n| 3 | `exit` | Closes the SSH session and tears down the tunnel when finished. |",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 118,
+   "seconds": 1.887,
+   "tok_s": 62.53,
+   "spec": {
+    "spec_accept_rate": 0.5612903225806452,
+    "spec_accept_length": 3.806451612903226,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 87,
+    "spec_num_proposed_drafts": 155,
+    "spec_verify_ct": 31,
+    "spec_correct_drafts_histogram": [
+     4,
+     6,
+     4,
+     6,
+     0,
+     11
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "fmt_bullets",
+   "category": "format",
+   "content": "- TCP is connection-oriented, requiring a handshake before data transfer, while UDP is connectionless and sends data without establishing a session.\n- TCP guarantees reliable delivery with acknowledgments and retransmissions, while UDP does not guarantee delivery or order.\n- TCP provides ordered data delivery, while UDP may deliver packets out of order.\n- TCP performs flow control and congestion control, while UDP has no built-in flow or congestion control.\n- TCP has higher overhead due to its 20-byte minimum header, while UDP has lower overhead with an 8-byte header.",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 114,
+   "seconds": 2.14,
+   "tok_s": 53.28,
+   "spec": {
+    "spec_accept_rate": 0.43333333333333335,
+    "spec_accept_length": 3.1666666666666665,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 78,
+    "spec_num_proposed_drafts": 180,
+    "spec_verify_ct": 36,
+    "spec_correct_drafts_histogram": [
+     7,
+     6,
+     10,
+     6,
+     1,
+     6
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "fmt_nocode",
+   "category": "format",
+   "content": "A mutex is a synchronization primitive that ensures only one thread can access a shared resource at a time. It works by having a thread acquire exclusive ownership before entering a critical section and release that ownership when finished, forcing any other thread attempting the same to wait until the resource becomes available.",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 58,
+   "seconds": 1.465,
+   "tok_s": 39.59,
+   "spec": {
+    "spec_accept_rate": 0.30434782608695654,
+    "spec_accept_length": 2.5217391304347827,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 35,
+    "spec_num_proposed_drafts": 115,
+    "spec_verify_ct": 23,
+    "spec_correct_drafts_histogram": [
+     6,
+     7,
+     6,
+     1,
+     2,
+     1
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "fmt_uppercase",
+   "category": "format",
+   "content": "JUPITER, SATURN, URANUS, NEPTUNE, EARTH",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 18,
+   "seconds": 0.351,
+   "tok_s": 51.26,
+   "spec": {
+    "spec_accept_rate": 0.9333333333333333,
+    "spec_accept_length": 6.0,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 14,
+    "spec_num_proposed_drafts": 15,
+    "spec_verify_ct": 3,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     0,
+     0,
+     1,
+     2
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "fmt_exactword",
+   "category": "format",
+   "content": "Canberra",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 3,
+   "seconds": 0.211,
+   "tok_s": 14.19,
+   "spec": {
+    "spec_accept_rate": 0.4,
+    "spec_accept_length": 3.0,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 2,
+    "spec_num_proposed_drafts": 5,
+    "spec_verify_ct": 1,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     1
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "fmt_json_only",
+   "category": "format",
+   "content": "[1, 2, 3]",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 10,
+   "seconds": 0.285,
+   "tok_s": 35.07,
+   "spec": {
+    "spec_accept_rate": 0.8,
+    "spec_accept_length": 5.0,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 8,
+    "spec_num_proposed_drafts": 10,
+    "spec_verify_ct": 2,
+    "spec_correct_drafts_histogram": [
+     0,
+     0,
+     0,
+     1,
+     0,
+     1
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "fmt_linecount",
+   "category": "format",
+   "content": "bright\nflight\nnight\nsight",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 9,
+   "seconds": 0.329,
+   "tok_s": 27.39,
+   "spec": {
+    "spec_accept_rate": 0.4,
+    "spec_accept_length": 3.0,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 6,
+    "spec_num_proposed_drafts": 15,
+    "spec_verify_ct": 3,
+    "spec_correct_drafts_histogram": [
+     0,
+     1,
+     1,
+     1
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "prose_p1",
+   "category": "prose",
+   "content": "The first light seeps into the harbour like a secret, turning the water from ink-black to a bruised and luminous silver. A few fishing boats, their paint faded and peeling, tug gently at their moorings, their reflections wavering in the stillness. The air is thick with the scent of salt and old rope, and the only sounds are the low, rhythmic clang of a distant buoy and the soft lap of water against the wooden docks. A lone gull cries out, a sharp, lonely note that hangs in the cool air before dissolving into the vast, pale sky.",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 117,
+   "seconds": 2.861,
+   "tok_s": 40.89,
+   "spec": {
+    "spec_accept_rate": 0.23773584905660378,
+    "spec_accept_length": 2.207547169811321,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 63,
+    "spec_num_proposed_drafts": 265,
+    "spec_verify_ct": 53,
+    "spec_correct_drafts_histogram": [
+     17,
+     14,
+     18,
+     3,
+     1
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "prose_p2",
+   "category": "prose",
+   "content": "The clockmaker\u2019s shop smelled of oil and old wood. For fifty years, Elara had repaired time for others, but she kept one clock for herself. It was a simple thing, brass and oak, its face blank. When a wealthy collector offered a fortune, she refused. When a desperate mother begged for it to soothe her sleepless child, she refused. The townsfolk called her selfish. But each night, Elara would wind the key and listen. The clock did not tick. Instead, it played a melody only she could hear\u2014the laugh of her daughter, lost to fever decades ago. The clock did not measure time. It held it. And Elara would not sell her last memory.",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 146,
+   "seconds": 3.614,
+   "tok_s": 40.39,
+   "spec": {
+    "spec_accept_rate": 0.24923076923076923,
+    "spec_accept_length": 2.246153846153846,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 81,
+    "spec_num_proposed_drafts": 325,
+    "spec_verify_ct": 65,
+    "spec_correct_drafts_histogram": [
+     25,
+     19,
+     9,
+     6,
+     4,
+     2
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "prose_p3",
+   "category": "prose",
+   "content": "A cache is like keeping the items you use most often on the kitchen counter instead of in the pantry. Fetching flour from the pantry takes time; grabbing it from the counter is instant. When you cook often, you restock the counter with whatever you reach for repeatedly, and clear out what you don't. Computers do the same: they store frequently used data in a small, fast location so they don't have to retrieve it from the slow, distant main memory every time. The result is the same information, delivered much faster.",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 109,
+   "seconds": 2.43,
+   "tok_s": 44.87,
+   "spec": {
+    "spec_accept_rate": 0.319047619047619,
+    "spec_accept_length": 2.5952380952380953,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 67,
+    "spec_num_proposed_drafts": 210,
+    "spec_verify_ct": 42,
+    "spec_correct_drafts_histogram": [
+     13,
+     11,
+     4,
+     10,
+     2,
+     2
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "prose_p4",
+   "category": "prose",
+   "content": "Maps are never neutral representations of space; they are inherently political documents. Every map reflects a series of choices about what to include, what to omit, and how to frame the world. The very act of drawing a border legitimises one claim to territory while erasing another, as seen in colonial cartography that carved up continents with little regard for the people living there. Projection itself is a political decision, privileging certain regions over others. Even the naming of places asserts power, embedding one culture's language while silencing another's. Far from objective tools, maps serve the interests of those who commission them, shaping how we perceive belonging, ownership, and identity. To read a map is to read power.",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 144,
+   "seconds": 3.573,
+   "tok_s": 40.3,
+   "spec": {
+    "spec_accept_rate": 0.25,
+    "spec_accept_length": 2.25,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 80,
+    "spec_num_proposed_drafts": 320,
+    "spec_verify_ct": 64,
+    "spec_correct_drafts_histogram": [
+     21,
+     19,
+     16,
+     3,
+     5
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  },
+  {
+   "id": "prose_p5",
+   "category": "prose",
+   "content": "The paper is brittle, its creases worn soft as fabric. Unfolding it feels like an act of trespass. The handwriting is instantly familiar, yet it belongs to a stranger\u2014a younger version of someone you know, or perhaps of yourself. The ink is faded, the scent of old paper a ghost of a moment long past. You read of trivial plans and forgotten worries, of a world that no longer exists. Every sentence is a small time capsule, heavy with a present that has since become history. You are reading a voice from a room that has been empty for forty years.",
+   "reasoning_chars": 0,
+   "finish_reason": "stop",
+   "completion_tokens": 120,
+   "seconds": 3.339,
+   "tok_s": 35.94,
+   "spec": {
+    "spec_accept_rate": 0.19344262295081968,
+    "spec_accept_length": 1.9672131147540983,
+    "spec_cap_length": 0.0,
+    "spec_block_accept_length": 0.0,
+    "spec_num_correct_drafts": 59,
+    "spec_num_proposed_drafts": 305,
+    "spec_verify_ct": 61,
+    "spec_correct_drafts_histogram": [
+     25,
+     22,
+     8,
+     4,
+     1,
+     1
+    ],
+    "spec_cap_lens_histogram": []
+   },
+   "pass": true,
+   "why": ""
+  }
+ ]
+}

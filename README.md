@@ -11,6 +11,8 @@ Other work this profile builds on:
 - **kpham-sgl**, [sgl-project/sglang#39187](https://github.com/sgl-project/sglang/pull/39187): the bounded dense-indexer prefill transient, backported here as `adapter/indexer_chunked*.py`.
 - **BBuf** and the SGLang `dsv4.1` branch contributors ([#39370](https://github.com/sgl-project/sglang/pull/39370), [#39646](https://github.com/sgl-project/sglang/pull/39646), [#39648](https://github.com/sgl-project/sglang/pull/39648), [#39653](https://github.com/sgl-project/sglang/pull/39653)): the decode kernel work in the optional `Dockerfile.canary` image.
 - **hushengkai**, for independently reproducing the EP2 / Engram cache / shared-expert padding changes on a second 4x GB10 fleet.
+- **rhys101**, [DeepSeek-V4.1-Flash-vLLM-DGX-Spark-8](https://github.com/rhys101/DeepSeek-V4.1-Flash-vLLM-DGX-Spark-8) (SG17 experiment): the SGLang overlay that routes small tensor-parallel all-reduces to RoCEnante, reused here with a TP4 adaptation (`Dockerfile.canary-roce`).
+- **local-inference-lab / Luke Alonso and Jason (original-el8)**, [b12x](https://github.com/local-inference-lab/b12x): RoCEnante, the one-shot RDMA all-reduce (`runtime/b12x`, Apache-2.0, frozen at the SG17 revision).
 - **MiaAI-Lab/sparkDash**, the benchmark used for every number below.
 
 ## What this profile changes
@@ -41,14 +43,17 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 |---|---:|---:|---:|---:|---:|
 | upstream TP4 example (from its README) | 45.4 | 72.9 | 103.1 (26.7) | 114.1 (23.2) | 134.2 (22.0) |
 | this profile, `Dockerfile` (base image) | 51.6 | 76.7 | 109.3 (28.5) | 160.9 (20.8) | 248.8 (16.7) |
-| this profile, `Dockerfile.canary` (upstream dsv4.1 branch) | **55.4** | **80.9** | **118.9 (30.7)** | **178.2 (24.0)** | **277.5 (18.6)** |
+| this profile, `Dockerfile.canary` (upstream dsv4.1 branch) | 55.4 | 80.9 | 118.9 (30.7) | 178.2 (24.0) | 277.5 (18.6) |
+| this profile, `Dockerfile.canary-roce` (branch + RoCEnante) | **56.9** | **82.4** | **120.4 (32.0)** | **180.0 (24.1)** | 275.6 (18.3) |
 
 ### Code and structured decode, aggregate tok/s
 
 | Profile | code c1 | code c8 | code c16 | structured c1 |
 |---|---:|---:|---:|---:|
 | this profile, base image | 96.7 | 446.7 | 595.3 | 104.5 |
-| this profile, canary image | **100.4** | **513.3** | **838.6** | **108.0** |
+| this profile, canary image | 100.4 | 513.3 | 838.6 | 108.0 |
+| this profile, canary + RoCEnante | **103.1** | 509.6 | **867.6** | **116.9** |
+| this profile, base image + RoCEnante | 104.0 | 450.3 | 770.0 | 112.1 |
 
 ### Prefill, cold, tok/s by prompt length
 
@@ -103,6 +108,21 @@ docker build -f Dockerfile.canary -t dsv41-4x-spark:canary .   # on the head and
 ```
 
 `SGLANG_DSPARK_FOLDED_SAMPLING=2` matters: the branch folds only the greedy draft proposal into the CUDA graph by default, and sampled requests (temperature > 0, i.e. normal chat) would take the eager path. With it forced, sampled decode runs ~5 % slower than greedy on this image (it was equal on the base image); without it, ~9 % slower.
+
+### Optional: RoCEnante for the tensor-parallel all-reduces
+
+`Dockerfile.canary-roce` adds the SG17 SGLang overlay from rhys101's eight-Spark work on top of the canary image: every tensor-parallel SUM all-reduce of at most 512 KiB (bf16/fp32) goes through b12x's one-shot RDMA all-reduce over both RoCE rails instead of NCCL, inside the CUDA graphs, with a transport health check at every result boundary (a stalled transfer fails the step instead of hanging the rank). The overlay was written for TP8; `runtime/roce_tp4_adapt.py` relaxes it to TP4/TP8 and to one or two rails. The RDMA proxy is plain C over libibverbs, compiled on first use inside the container (`B12X_ROCE_CACHE_DIR`).
+
+```bash
+scripts/fetch-sglang-canary.sh
+docker build -f Dockerfile.canary-roce -t dsv41-4x-spark:canary-roce .    # on every node
+# .env.tp4:
+#   IMAGE=dsv41-4x-spark:canary-roce
+#   EXTRA_CONTAINER_ENV="DSV41_INDEXER_CHUNKED=1 SGLANG_DSPARK_FOLDED_SAMPLING=2 SGLANG_ROCE_ALLREDUCE=1 B12X_ROCE_HCA=rocep1s0f0,roceP2p1s0f0 B12X_ROCE_CACHE_DIR=/state/b12x-roce B12X_COMPILE_CACHE_DIR=/state/b12x-compile"
+./start-tp4.sh serve
+```
+
+`B12X_ROCE_HCA` lists the RDMA devices to stripe across (both rails of the switched fabric here; their port-1 GID at `NCCL_IB_GID_INDEX` must be populated). The boot log must show `RoCEnante ready: world=4 hcas=...` and later `ROCE_TP8_ROUTE ... bytes=491520`. Measured on this fleet: +3 % prose c1, +8 % structured c1, +3.5 % code c16 over the canary image; needle PASS at 131k and 262k; a soak of three 16-stream code/prose waves concurrent with a 262k cold prefill completed with zero transport errors. Sampled decode is within 4 % of greedy on this image. The cost is a new transport in the decode path: b12x reports one open issue where a rank wedged under long mixed-context traffic on an earlier revision ([b12x#313](https://github.com/local-inference-lab/b12x/issues/313)); the result-boundary health check in the overlay is the mitigation, and NCCL is one env change away (`SGLANG_ROCE_ALLREDUCE=0`).
 
 ## Adapters added here
 

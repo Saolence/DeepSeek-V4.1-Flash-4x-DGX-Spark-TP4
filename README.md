@@ -222,6 +222,8 @@ patch and its flags are in place. `doctor` warns, and the port counters are the 
 [#19](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-DGX-Sparks/pull/19), with the NCCL
 patch from [FujitsuPolycom/sparkring](https://github.com/FujitsuPolycom/sparkring).
 
+The decode table in [`docs/switchless-ring.md`](docs/switchless-ring.md) (prose c1 60.5, code c1 107.5 at 400 output tokens) is the same stack measured on the author's ring; re-run here with a 400-token window the switched production profile gives prose c1 58–60 and code c1 107.4, i.e. the ring neither adds nor costs decode speed. Its prefill column is lower, as the ring's single-link bisection predicts.
+
 ### Optional: prefill TP split (with either canary image)
 
 `adapter/spark_prefill_dense.py` is rhys101's SG18 helper with its topology check relaxed from eight ranks to four or eight; `adapter/indexer_chunked_v3.py` calls it from inside the #39187 path when a prefill chunk has at least `SPARK_PREFILL_TP_MIN_ROWS` rows (1024) and the context is at least `SPARK_PREFILL_TP_MIN_CONTEXT` (32768). Each rank scores only its slice of the query rows, in row chunks of at most 2 GiB of fp32 logits, and publishes only the tail rows of the candidate masks; the top-k and block ids travel as an int all-gather (no floating-point collective). The bitwise CPU test covers the split at world sizes 1, 2 and 4, with and without tail-only publishing, down to one row per chunk. Enable with

@@ -174,6 +174,12 @@ EXTRA_CONTAINER_ENV="... SPARK_PREFILL_TP_SPLIT=1 SPARK_PREFILL_TP_MIN_CONTEXT=3
 
 and look for `DSV41 prefill TP split (v3) rank=0 ... end=1024` in the boot log. Decode is unaffected (the draft runner keeps the stock path). The helper refuses thresholds below 32768 tokens / 1024 rows at boot (`ValueError`), and a sweep with that floor relaxed to 16k gained nothing outside the ±5–10 % run-to-run spread of short prefills, so 32768 stays. `runtime/flash_mla_sm120.canary.py` also carries SG18's scratch zero-initialisation (masked candidates gather slot 0; keeping the scratch finite avoids a NaN through a zero probability).
 
+### Tested and not adopted (2026-09-17)
+
+- **sglang#39704** (mHC/metadata overhead for medium batches) applied onto the pinned branch: every column within ±2 % of production on this fleet (its gain is at 32–64 concurrent requests on GB300). Kept out.
+- **Newer `dsv4.1` heads (from 2026-09-16 22:15, #39671)** drop the torch candidate indexer and gate the DeepGEMM one on SM100; on SM121 DeepGEMM then rejects the 256-token KV pages (`block_kv == 64`). The pin stays at `f80c91a4b` until upstream has an SM12x candidate path again.
+- `CHUNKED_PREFILL_SIZE=8192`, split threshold 16k, NVFP4 experts, `DSV41_CACHE_GIB` above 4, k≠5, NCCL channel/algorithm tuning: measured, no gain or worse.
+
 ## Adapters added here
 
 All adapters are import hooks in `adapter/sitecustomize.py`, gated by an environment variable, off unless the variable is set, and each refuses to boot if the engine symbol it patches has drifted.

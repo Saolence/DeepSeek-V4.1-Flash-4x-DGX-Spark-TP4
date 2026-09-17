@@ -11,7 +11,7 @@ Other work this profile builds on:
 - **kpham-sgl**, [sgl-project/sglang#39187](https://github.com/sgl-project/sglang/pull/39187): the bounded dense-indexer prefill transient, backported here as `adapter/indexer_chunked*.py`.
 - **BBuf** and the SGLang `dsv4.1` branch contributors ([#39370](https://github.com/sgl-project/sglang/pull/39370), [#39646](https://github.com/sgl-project/sglang/pull/39646), [#39648](https://github.com/sgl-project/sglang/pull/39648), [#39653](https://github.com/sgl-project/sglang/pull/39653)): the decode kernel work in the optional `Dockerfile.canary` image.
 - **hushengkai**, for independently reproducing the EP2 / Engram cache / shared-expert padding changes on a second 4x GB10 fleet.
-- **rhys101**, [DeepSeek-V4.1-Flash-vLLM-DGX-Spark-8](https://github.com/rhys101/DeepSeek-V4.1-Flash-vLLM-DGX-Spark-8) (SG17 experiment): the SGLang overlay that routes small tensor-parallel all-reduces to RoCEnante, reused here with a TP4 adaptation (`Dockerfile.canary-roce`).
+- **rhys101**, [DeepSeek-V4.1-Flash-vLLM-DGX-Spark-8](https://github.com/rhys101/DeepSeek-V4.1-Flash-vLLM-DGX-Spark-8): the SG17 SGLang overlay that routes small tensor-parallel all-reduces to RoCEnante (reused with a TP4 adaptation in `Dockerfile.canary-roce`) and the SG18 native prefill TP split (`adapter/spark_prefill_dense.py`, combined with the indexer backport in `adapter/indexer_chunked_v3.py`).
 - **local-inference-lab / Luke Alonso and Jason (original-el8)**, [b12x](https://github.com/local-inference-lab/b12x): RoCEnante, the one-shot RDMA all-reduce (`runtime/b12x`, Apache-2.0, frozen at the SG17 revision).
 - **MiaAI-Lab/sparkDash**, the benchmark used for every number below.
 
@@ -30,6 +30,7 @@ Relative to the upstream TP4 example, all of it in `.env.tp4.example` plus gated
 | `CHUNKED_PREFILL_SIZE` | 1024 | **4096** | Safe only together with the indexer backport below |
 | `DSV41_SHARED_PAD_K=1` | – | **on** | Pads the shared expert's K 576 → 640 so it stops falling off the b12x MXFP8 kernel: −0.9 ms/step, bit-identical |
 | `DSV41_INDEXER_CHUNKED=1` | – | **on** | sglang#39187: indexer logits scored in ≤ 2 GiB row chunks, tail-only candidate masks; 262k cold prefill keeps ≥ 7 GiB free on the head |
+| prefill TP split (`SPARK_PREFILL_TP_SPLIT=1`, canary images) | – | **on** | SG18: the dense prefill indexer's query rows are partitioned across the four ranks from 32k context; each rank scores a quarter, the top-k and candidate block ids are all-gathered as ints. sparkDash prefill 128k 3499 → 4364, 262k 2701 → 3893 |
 | `--enable-cache-report` | off | **on** | `usage.prompt_tokens_details.cached_tokens` on every response (also in streaming `usage`), so clients can see prefix-cache hits |
 
 Everything else (memory fraction 0.80, 8M-token KV pin, 1M context, NFS/Engram layout, the OpenAI serving fixes) is upstream's.
@@ -65,16 +66,18 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 | upstream example (chunk 1024) | 3350 | 3782 | 3768 | 3531 | 3251 | – |
 | this profile, base image (chunk 4096 + indexer backport) | 3532 | 4006 | 4038 | 3917 | 3230 | 2724 |
 | this profile, canary image | 3174 | 3982 | 4180 | 4010 | 3499 | 2701 |
+| this profile, canary-roce + prefill TP split (v3) | **4070** | **4513** | **4554** | **4375** | **4364** | **3893** |
 
 **Caveat on the prefill table:** sparkDash's prefill filler is one repeated token, so every filler token hits the same Engram row and the row cache (`DSV41_CACHE_GIB=4`) inflates those numbers (reported by koldfrontier in [MiaAI-Lab#21](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-DGX-Sparks/issues/21)). The same canary engine on random-word text, cold, one request per size, `prompt_tokens / TTFT`:
 
 | random text | 11.8k | 23.8k | 47.3k | 94.3k | 188.7k |
 |---|---:|---:|---:|---:|---:|
-| tok/s | 3330 | 3666 | 3347 | 3187 | 2657 |
+| canary, tok/s | 3330 | 3666 | 3347 | 3187 | 2657 |
+| canary-roce + prefill TP split (v3), tok/s | 2879 | 3612 | 3776 | 4006 | 3092 |
 
-That is 9–20 % below the sparkDash column at 16k–128k and within 2 % at 262k; use this row for real prompts.
+Use these rows for real prompts; the sparkDash column overstates by 9–20 % at 16k–128k. The v3 row's 12k value is a single cold request right after boot (the split does not engage below 32k).
 
-Long-context checks on the canary image: needle retrieval PASS at 131k, 262k and **985k** tokens (the 985k prompt prefilled cold in 732 s, ~1.3k tok/s); head `MemAvailable` low-water 7.0 GiB during the 262k cold prefill and 6.6 GiB during the 985k one (7.7 GiB at 262k on the base image).
+Long-context checks: needle retrieval PASS at 131k, 262k and **985k** tokens on the canary image (985k cold prefill 732 s, head `MemAvailable` low-water 6.6 GiB) and on canary-roce + prefill TP split (131k 25.6 s, 262k 58 s, **985k 585 s**, low-water 5.0 GiB). The split without the chunked scoring (SG18 as published, base image) reached 503 s at 985k but left only 1.9 GiB on the head, which is why v3 keeps the 2 GiB logits budget inside each rank's partition.
 
 ## Quick start
 
@@ -127,6 +130,16 @@ docker build -f Dockerfile.canary-roce -t dsv41-4x-spark:canary-roce .    # on e
 
 `B12X_ROCE_HCA` lists the RDMA devices to stripe across (both rails of the switched fabric here; their port-1 GID at `NCCL_IB_GID_INDEX` must be populated). The boot log must show `RoCEnante ready: world=4 hcas=...` and later `ROCE_TP8_ROUTE ... bytes=491520`. Measured on this fleet: +3 % prose c1, +8 % structured c1, +3.5 % code c16 over the canary image; needle PASS at 131k and 262k; a soak of three 16-stream code/prose waves concurrent with a 262k cold prefill completed with zero transport errors. `SGLANG_ROCE_MAX_SIZE` defaults to the overlay's 512 KiB; the 16-request decode step's all-reduce is 983 KB, so 2 MiB (b12x's own default) routes it too: c16 aggregate +4.5 %, code c1 +3 %, structured +3 %, and sampled decode becomes equal to greedy. The cost is a new transport in the decode path: b12x reports one open issue where a rank wedged under long mixed-context traffic on an earlier revision ([b12x#313](https://github.com/local-inference-lab/b12x/issues/313)); the result-boundary health check in the overlay is the mitigation, and NCCL is one env change away (`SGLANG_ROCE_ALLREDUCE=0`).
 
+### Optional: prefill TP split (with either canary image)
+
+`adapter/spark_prefill_dense.py` is rhys101's SG18 helper with its topology check relaxed from eight ranks to four or eight; `adapter/indexer_chunked_v3.py` calls it from inside the #39187 path when a prefill chunk has at least `SPARK_PREFILL_TP_MIN_ROWS` rows (1024) and the context is at least `SPARK_PREFILL_TP_MIN_CONTEXT` (32768). Each rank scores only its slice of the query rows, in row chunks of at most 2 GiB of fp32 logits, and publishes only the tail rows of the candidate masks; the top-k and block ids travel as an int all-gather (no floating-point collective). The bitwise CPU test covers the split at world sizes 1, 2 and 4, with and without tail-only publishing, down to one row per chunk. Enable with
+
+```
+EXTRA_CONTAINER_ENV="... SPARK_PREFILL_TP_SPLIT=1 SPARK_PREFILL_TP_MIN_CONTEXT=32768 SPARK_PREFILL_TP_MIN_ROWS=1024"
+```
+
+and look for `DSV41 prefill TP split (v3) rank=0 ... end=1024` in the boot log. Decode is unaffected (the draft runner keeps the stock path). `runtime/flash_mla_sm120.canary.py` also carries SG18's scratch zero-initialisation (masked candidates gather slot 0; keeping the scratch finite avoids a NaN through a zero probability).
+
 ## Adapters added here
 
 All adapters are import hooks in `adapter/sitecustomize.py`, gated by an environment variable, off unless the variable is set, and each refuses to boot if the engine symbol it patches has drifted.
@@ -135,7 +148,8 @@ All adapters are import hooks in `adapter/sitecustomize.py`, gated by an environ
 |---|---|---|
 | `adapter/shared_pad_k.py` | `DSV41_SHARED_PAD_K` | Shared-expert `down_proj` K padded 576 → 640 with re-blocked scales, so the shape stays on the b12x MXFP8 kernel instead of the CUTLASS fallback |
 | `adapter/indexer_chunked.py` | `DSV41_INDEXER_CHUNKED` | sglang#39187 adapted to the `dev-dsv41` image backend (`self.candidate_masks`) |
-| `adapter/indexer_chunked_v2.py` | `DSV41_INDEXER_CHUNKED` | sglang#39187 verbatim, for the `candidate_metadata` backend of the `dsv4.1` branch; `sitecustomize` picks v1 or v2 from the stock source |
+| `adapter/indexer_chunked_v2.py` | `DSV41_INDEXER_CHUNKED` | sglang#39187 verbatim, for the `candidate_metadata` backend of the `dsv4.1` branch (kept for reference) |
+| `adapter/indexer_chunked_v3.py` + `spark_prefill_dense.py` | `DSV41_INDEXER_CHUNKED`, `SPARK_PREFILL_TP_SPLIT` | v2 plus the SG18 prefill TP split inside the chunked path; `sitecustomize` picks v1 or v3 from the stock source |
 
 Tests: `tests/test_indexer_chunked.py` and `tests/test_indexer_chunked_v2.py` lift the stock function out of the engine's source, drive it and the backport with deterministic fake kernels, and require bitwise-equal `page_indices`, `raw_indices` and candidate masks over six scenarios (ragged batches, empty requests, full and tail-only mask publishing, mask consumption, one row per chunk up to a single chunk). Both run inside the image build (`Dockerfile` runs v1, `Dockerfile.canary` runs v2), together with upstream's thinking-alias, output-cap and loop-abort tests.
 

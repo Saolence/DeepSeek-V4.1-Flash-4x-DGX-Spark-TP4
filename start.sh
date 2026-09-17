@@ -78,6 +78,20 @@ NCCL_SHM_DISABLE="${NCCL_SHM_DISABLE:-1}"
 NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
 NCCL_HOST_DIR="${NCCL_HOST_DIR:-$HOME/nccl-2.30.7}"
 NCCL_CONTAINER_DIR="${NCCL_CONTAINER_DIR:-/nccl}"
+# ─── Switchless ring (opt-in, default off) ────────────────────────────────────
+# On, this stack boots on a four-node CX7 ring wired without a switch. Off, every
+# other deployment is unchanged. See files/nccl.sh and docs/switchless-ring.md.
+NCCL_SWITCHLESS_RING_ONLY="${NCCL_SWITCHLESS_RING_ONLY:-0}"
+# Ring-only NCCL knobs (only read when the switch is on).
+NCCL_ALGO="${NCCL_ALGO:-}"
+NCCL_SKIP_TREE_CONNECT="${NCCL_SKIP_TREE_CONNECT:-}"
+NCCL_IB_SUBNET_PREFIX_LEN="${NCCL_IB_SUBNET_PREFIX_LEN:-}"
+NCCL_MIN_NCHANNELS="${NCCL_MIN_NCHANNELS:-}"
+NCCL_P2P_LEVEL="${NCCL_P2P_LEVEL:-}"
+# Overlay the patched library over the image's pip NCCL instead of LD_LIBRARY_PATH.
+# Defaults to following the ring switch, so it can also be enabled on its own.
+NCCL_OVERLAY_PIP="${NCCL_OVERLAY_PIP:-$NCCL_SWITCHLESS_RING_ONLY}"
+NCCL_PIP_SO="${NCCL_PIP_SO:-/opt/sglang/lib/python3.12/site-packages/nvidia/nccl/lib/libnccl.so.2}"
 
 MODEL_DIR="${MODEL_DIR:-$HOME/NewModels/DeepSeek-V4.1-Flash}"
 COMMON_MODEL="${COMMON_MODEL:-/var/tmp/DeepSeek-V4.1-Flash}"
@@ -154,6 +168,8 @@ mkdir -p "$LOG_DIR" "$STATE_DIR"
 
 # shellcheck source=files/nfs-share.sh
 source "$ROOT/files/nfs-share.sh"
+# shellcheck source=files/nccl.sh
+source "$ROOT/files/nccl.sh"
 
 remote_on() {
   local host="$1"; shift
@@ -328,7 +344,10 @@ docker_common_args() {
     local _kv
     for _kv in ${EXTRA_CONTAINER_ENV}; do _a+=(-e "$_kv"); done
   fi
-  if [[ -f "$NCCL_HOST_DIR/libnccl.so.2.30.7" || -f "$NCCL_HOST_DIR/libnccl.so.2" ]]; then
+  if [[ "$NCCL_SWITCHLESS_RING_ONLY" == "1" ]]; then
+    switchless_ring_args _a
+    nccl_mount_args _a || die "NCCL setup for the switchless ring failed"
+  elif [[ -f "$NCCL_HOST_DIR/libnccl.so.2.30.7" || -f "$NCCL_HOST_DIR/libnccl.so.2" ]]; then
     _a+=(-v "$NCCL_HOST_DIR:$NCCL_CONTAINER_DIR:ro" -e "LD_LIBRARY_PATH=$NCCL_CONTAINER_DIR")
   fi
 }
@@ -363,6 +382,11 @@ worker_env_lines() {
   # Mirror of the head's EXTRA_CONTAINER_ENV passthrough; every rank must agree.
   local _extra_env="-e DSV41_EXTRA_ENV=1" _kv
   for _kv in ${EXTRA_CONTAINER_ENV:-}; do _extra_env+=" -e $(printf '%q' "$_kv")"; done
+  # Ring environment is mirrored to every rank. The leading space comes from here,
+  # not from switchless_ring_env_string, so that with the switch off this line is
+  # byte-identical to before it existed.
+  local _ring_env=""
+  switchless_ring_enabled && _ring_env=" $(switchless_ring_env_string)"
   cat <<EOF
         -e NODE_RANK=$rank -e NNODES=$NNODES \\
         -e TP_SIZE=$TP_SIZE -e EP_SIZE=$EP_SIZE \\
@@ -415,7 +439,7 @@ worker_env_lines() {
         -e SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0 \\
         -e DSV41_TP_PAD=${DSV41_TP_PAD:-1} \\
         -e HOST_IP=$wip -e VLLM_HOST_IP=$wip \\
-        $_extra_env \\
+        $_extra_env$_ring_env \\
 EOF
 }
 
@@ -440,6 +464,40 @@ cmd_doctor() {
     info "overlay image present ($(docker image inspect -f '{{.Architecture}}' "$IMAGE"))"
   else
     warn "image $IMAGE missing — ./start.sh build (pulls $BASE_IMAGE)"
+  fi
+
+  # Switchless ring. Inert unless NCCL_SWITCHLESS_RING_ONLY=1; validates the config
+  # and every rank's patched NCCL + RoCE v2 GID before any container is replaced.
+  if switchless_ring_enabled; then
+    local ring_gid wh wgid
+    if nccl_validate_config; then
+      info "switchless ring: config OK (NNODES=$NNODES TP=$TP_SIZE EP=$EP_SIZE, IB_HCA=$IB_HCA)"
+    else
+      warn "switchless ring: configuration rejected"
+      ok=1
+    fi
+    if ring_gid=$(nccl_preflight); then
+      info "switchless ring: head preflight OK (RoCEv2 GID index $ring_gid)"
+    else
+      warn "switchless ring: head preflight failed"
+      ok=1
+    fi
+    for wh in "${WORKER_HOSTS[@]}"; do
+      if wgid=$(remote_on "$wh" "set -e
+$(nccl_worker_settings)
+nccl_preflight" 2>/dev/null); then
+        wgid="${wgid//[$'\r\n']/}"
+        if [[ "$wgid" =~ ^[0-9]+$ ]]; then
+          info "switchless ring: $wh preflight OK (RoCEv2 GID index $wgid)"
+        else
+          warn "switchless ring: $wh preflight returned no GID index"
+          ok=1
+        fi
+      else
+        warn "switchless ring: $wh preflight failed"
+        ok=1
+      fi
+    done
   fi
 
   if [[ -f "$MODEL_DIR/config.json" ]]; then
@@ -488,6 +546,13 @@ cmd_doctor() {
       info "SSH $h OK → $(tr -d '\r' </tmp/dsv41-host-"$h".txt)"
       remote_on "$h" "command -v docker >/dev/null && nvidia-smi -L | head -1 && test -d /dev/infiniband && echo IB_OK" \
         || { warn "docker/GPU/IB check failed on $h"; ok=1; }
+      # Each worker's own volume, in both profiles: NFS volume when sharing,
+      # local checkpoint when not. Catches a half-provisioned node in doctor
+      # rather than in serve.
+      if ! nfs_worker_has_model "$h"; then
+        warn "$h: weights missing/incomplete or volume $NFS_VOLUME unavailable (NFS_SHARE=$NFS_SHARE)"
+        ok=1
+      fi
     else
       err "SSH to $h FAILED"
       cat /tmp/dsv41-ssh-"$h".err || true
@@ -563,6 +628,9 @@ cmd_build() {
 }
 
 cmd_share() {
+  # NFS_SHARE=0 means local weights on every node — sharing here would replace
+  # the local worker volumes and undo them. Idempotent so serve can call it blind.
+  [[ "$NFS_SHARE" == 1 ]] || { info "NFS_SHARE=0 — keeping local worker volumes"; return 0; }
   info "=== share spark1 checkpoint over NFSv4 on ConnectX ==="
   [[ -f "$MODEL_DIR/config.json" ]] || die "no checkpoint — ./start.sh download"
   ln -sfn "$MODEL_DIR" "$COMMON_MODEL"
@@ -604,19 +672,35 @@ cmd_serve() {
     cmd_build
   fi
 
-  local h need_share=0
+  # Fatal here, unlike doctor: a ring that fails its preflight would die at NCCL
+  # init anyway, after replacing four containers.
+  if switchless_ring_enabled; then
+    nccl_validate_config || die "switchless ring: invalid configuration (./start.sh doctor)"
+    nccl_preflight >/dev/null || die "switchless ring: head preflight failed (./start.sh doctor)"
+  fi
+
+  local h
   for h in "${WORKER_HOSTS[@]}"; do
-    if ! nfs_worker_has_model "$h"; then
-      need_share=1
-    fi
     if ! remote_ok_on "$h" "docker image inspect $(printf '%q' "$IMAGE") >/dev/null 2>&1"; then
       info "image missing on $h — building"
       cmd_build
       break
     fi
   done
-  if [[ "$need_share" -eq 1 || "$NFS_SHARE" == "1" ]]; then
+
+  if [[ "$NFS_SHARE" == "1" ]]; then
     cmd_share
+  else
+    # Validate local weights before replacing containers: a missing shard
+    # otherwise surfaces as a load failure twenty minutes later, with four
+    # containers already down. Same reason the ring gate above is fatal.
+    local_model_has_weights \
+      || die "head: $MODEL_DIR is missing/incomplete; NFS_SHARE=0 requires a complete local checkpoint"
+    for h in "${WORKER_HOSTS[@]}"; do
+      nfs_worker_has_model "$h" \
+        || die "$h: local volume $NFS_VOLUME is missing/incomplete. Provision local weights (docs/switchless-ring.md); NFS_SHARE=0 disables NFS setup."
+    done
+    info "weights: NFS_SHARE=0 — head reads $MODEL_DIR; workers use local volume $NFS_VOLUME"
   fi
 
   API_KEY="$(api_key)"
@@ -794,7 +878,16 @@ cmd_status() {
   local h
   for h in "${WORKER_HOSTS[@]}"; do
     echo "== worker $h =="
-    remote_on "$h" "docker ps --filter name=$WORKER_CTN --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' ; test -f $COMMON_MODEL/config.json && echo weights:OK || echo weights:MISSING" || warn "status SSH $h failed"
+    remote_on "$h" "docker ps --filter name=$WORKER_CTN --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'" \
+      || { warn "status SSH $h failed"; continue; }
+    # Look inside $NFS_VOLUME, not at $COMMON_MODEL: the latter is a head-side
+    # symlink to MODEL_DIR and never exists on a worker, so the old check
+    # reported weights:MISSING on healthy workers in the NFS_SHARE=0 profile.
+    if nfs_worker_has_model "$h"; then
+      echo "weights:OK ($NFS_VOLUME)"
+    else
+      echo "weights:MISSING ($NFS_VOLUME)"
+    fi
     echo
   done
   echo "== API =="

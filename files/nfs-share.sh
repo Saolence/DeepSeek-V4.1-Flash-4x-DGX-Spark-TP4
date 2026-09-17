@@ -172,11 +172,36 @@ nfs_ensure_worker_volume() {
   "
 }
 
+# Head-side complete-checkpoint test, used by the NFS_SHARE=0 profile before it
+# starts four containers. NFS_SHARE=1 does not need it: it shares whatever the
+# head has and lets the load fail loudly.
+local_model_has_weights() {
+  [[ -r "$MODEL_DIR/config.json" && -s "$MODEL_DIR/config.json" ]] || return 1
+  local -a shards=("$MODEL_DIR"/model-*-of-*.safetensors)
+  [[ ${#shards[@]} -ge "$EXPECTED_SHARDS" ]] || return 1
+  local shard
+  for shard in "${shards[@]}"; do
+    [[ -r "$shard" && -s "$shard" ]] || return 1
+  done
+}
+
 nfs_worker_has_model() {
   local host="$1"
+  # Inspect first: `docker run -v` would create an empty volume on a typo.
+  # Use the serving image already required by serve; status must not pull an
+  # unrelated mutable image, and the probe needs neither network nor GPUs.
+  # Only config.json used to be checked, so a half-copied volume passed.
+  local check='test -r /m/config.json && test -s /m/config.json || exit 1
+    expected=$1
+    set -- /m/model-*-of-*.safetensors
+    test "$#" -ge "$expected" || exit 1
+    for shard do test -r "$shard" && test -s "$shard" || exit 1; done'
   remote_on "$host" --timeout 180 \
-    "docker image inspect alpine:latest >/dev/null 2>&1 || docker pull alpine:latest >/dev/null
-     docker run --rm -v '${NFS_VOLUME}:/m:ro' alpine:latest test -f /m/config.json" \
+    "docker volume inspect $(printf '%q' "$NFS_VOLUME") >/dev/null 2>&1 &&
+     docker run --rm --pull=never --network none \
+       --mount $(printf '%q' "type=volume,source=$NFS_VOLUME,target=/m,readonly") \
+       --entrypoint /bin/sh $(printf '%q' "$IMAGE") \
+       -c $(printf '%q' "$check") sh $(printf '%q' "$EXPECTED_SHARDS")" \
     >/dev/null 2>&1
 }
 

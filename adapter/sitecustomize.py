@@ -42,7 +42,7 @@ class EngramLoader(importlib.abc.Loader):
                 if 'self.candidate_masks' in _src:
                     from indexer_chunked import install as install_indexer_chunked
                 else:
-                    from indexer_chunked_v2 import install as install_indexer_chunked
+                    from indexer_chunked_v3 import install as install_indexer_chunked
                 install_indexer_chunked(module)
         elif module.__name__ == 'sglang.srt.entrypoints.openai.encoding_dsv41':
             from encoding_compat import install_encoder

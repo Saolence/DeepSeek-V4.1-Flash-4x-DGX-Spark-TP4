@@ -182,6 +182,8 @@ docker build -f Dockerfile.canary-roce -t dsv41-4x-spark:canary-roce .    # on e
 
 ### Optional: switchless ring (no RoCE switch)
 
+Launcher fixes from Saolence after the initial merge: the worker containers now mount the same NCCL as the head through `nccl_mount_args` and the worker preflight actually runs (#5, live-tested here on the switched fleet, 114 s to ready); `./start-tp4.sh build` stages the workers with anchored rsync excludes, compiles `BUILD_DOCKERFILE` and passes `BUILD_ARGS` (#6, the unanchored `models` exclude was dropping `sglang/srt/models` from the workers); the second plane's addressing is documented in [docs/switchless-ring.md](docs/switchless-ring.md) (#2). Note for the non-ring path: torch resolves `libnccl.so.2` through its own RPATH, so only `NCCL_OVERLAY_PIP=1` replaces the library torch uses; the `LD_LIBRARY_PATH` mount reaches `ctypes` users only.
+
 Every default above assumes a switched fabric. If the four Sparks are cabled as a **ring**
 (a-b-c-d-a, one DAC per adjacency, no switch) the stack does not boot on those defaults:
 NCCL builds a tree as well as the ring, the tree wants a direct path between opposite nodes

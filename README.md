@@ -112,17 +112,41 @@ Speed changes here are meant to be lossless: same weights, every draft token ver
 
 The three tasks that fail on every stack (`code_interval_intersect`, `json_escape`, `math_m9`) fail identically on the upstream example. Raw results: [`docs/results/quality-20260917/`](docs/results/quality-20260917/). Run it from a worker, not from the head (it executes model-generated Python).
 
+## Host prerequisites
+
+Everything here is checked by `./start-tp4.sh doctor` unless marked otherwise. A fresh
+clone on four Sparks needs:
+
+| | |
+|---|---|
+| Hardware | Four DGX Sparks (GB10, aarch64), ~121 GiB unified memory each, one ConnectX-7 each: switched RoCE for the production profile, or four DACs in a ring for the optional one |
+| Driver / runtime | NVIDIA driver 580.x with `nvidia-smi` on every node, plus **nvidia-container-toolkit** — every `docker run` uses `--gpus all`, while `doctor` only checks that `docker` and `nvidia-smi` exist |
+| Docker | Engine on every node, and your user able to run `docker` and `docker volume` without `sudo`; the launcher uses `--shm-size`, `--ulimit memlock=-1`, `--privileged` and the `local` volume driver |
+| Host CLI (head) | `python3` with `pexpect` (`scripts/remote.py` is the ssh wrapper), `ssh` to every worker with a key at `SSH_IDENTITY` whose `.pub` exists next to it, `rsync` (build pushes the repo to each worker), `curl`, `tar`, `base64`, `ip route get`, and `rpcinfo` (`nfs-common`) while `NFS_SHARE=1` |
+| Weights | `deepseek-ai/DeepSeek-V4.1-Flash` at the pinned revision: 476 GiB and 48 shards per copy. `./start-tp4.sh download` fetches it on the head with the `hf` CLI (`pip install -U huggingface_hub[cli]` when missing); the ring profile keeps a copy on every node, the switched profile shares the head's |
+| Disk | head: 476 GiB for the checkpoint plus ~50 GB for the image; every node: ~48 GiB of Engram rows (`pack`, at TP4) plus ~50 GB for the image |
+| Ports | 8888 (API), 20000 (torch dist init) and 2049/111 (NFS, only while `NFS_SHARE=1`) reachable between the nodes |
+| Credentials | none for the weights. `API_KEY` guards the endpoint, and an empty value — or `none`, `off`, `dummy`, `0` — leaves it open, so keep the port private when it is unset |
+
+With `NFS_SHARE=1` the checkpoint is published with hardlinks (`files/nfs-share.sh`), so
+`MODEL_DIR` has to share a filesystem with the HF cache.
+
 ## Quick start
 
-Identical to upstream; only the example file differs.
+Same flow as upstream, with the weight download and the canary staging made explicit.
 
 ```bash
 cp .env.tp4.example .env.tp4          # fill in HEAD_IP / WORKER_* / MODEL_DIR / fabric as in docs/README-upstream.md
+./start-tp4.sh download               # 476 GiB at the pinned revision; needs the hf CLI. Skips when it is already there
 ./start-tp4.sh doctor
 ./start-tp4.sh build                  # bakes the adapters and runs the in-image tests
 ./start-tp4.sh share && ./start-tp4.sh pack   # first time only, see upstream README
 ./start-tp4.sh serve                  # ./start-tp4.sh stop | status | logs | smoke
 ```
+
+With a canary image, run `scripts/fetch-sglang-canary.sh` once before `build` — it stages
+the branch tree the `Dockerfile.canary*` files `COPY` (`~75 MB` from GitHub). Everything
+else in the sequence is the same.
 
 The boot log must show these lines, otherwise the profile is not active:
 

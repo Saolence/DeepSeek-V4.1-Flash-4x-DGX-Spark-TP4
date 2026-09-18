@@ -3,6 +3,12 @@
 Analysis only (2026-09-11). Nothing here is implemented or tested unless it says so; the
 measurements come from the boots recorded in `logs/profile-2026-09-10/REPORT.md` §17-17b.
 
+> Superseded for deployment purposes: the shipped profile runs `CHUNKED_PREFILL_SIZE=4096`
+> with the sglang#39187 indexer backport at `MEM_FRACTION_STATIC=0.80`, and that is the
+> configuration every number in [`../README.md`](../README.md) and
+> [`window-20260916.md`](window-20260916.md) comes from. The sizes discussed below are the
+> pre-backport analysis that led there — do not copy them into `.env.tp4`.
+
 ## 1. Why the chunk size is tied to memory at all
 
 On the head (rank 0, ~4.5-5.3 GB free after boot) a prefill's memory peak is set by the

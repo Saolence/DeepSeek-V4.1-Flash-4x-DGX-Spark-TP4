@@ -32,7 +32,7 @@ One image, one env file. Everything in the tables below labelled **production** 
 | NCCL | `IB_HCA=rocep1s0f0,roceP2p1s0f0` | on | neutral within noise, kept for the remaining collectives |
 | Fabric | switched RoCE, tree reachable | on | every default assumes a switch; a switchless ring sets `NCCL_SWITCHLESS_RING_ONLY=1` instead (see below) |
 | Serving | `--enable-cache-report`, `--min-free-slots-delay 1`, `DSV41_MAX_NEW_TOKENS`, loop abort, thinking alias | on | cached-token usage for clients; the rest is upstream's |
-| Weight loading | `DSV41_FAST_LOAD=1` (+ `--model-loader-extra-config {"num_threads":1}`) | **on** | engine start 343 s → 124 s, bytes identical, decode/prefill/needle unchanged; costs 3–6 % of the KV pool (7.27 M vs 7.47–7.82 M tokens on the same image), which is the one trade-off in this table ([docs/fast-load.md](docs/fast-load.md)) |
+| Weight loading | `DSV41_FAST_LOAD=1` (+ `--model-loader-extra-config {"num_threads":1}`) | **on** | engine start 343 s → 111–124 s, bytes identical, decode/prefill/needle unchanged; costs 3–13 % of the KV pool (6.71–7.27 M vs 7.47–7.82 M tokens on the same image), the one trade-off in this table ([docs/fast-load.md](docs/fast-load.md)) |
 | Rust image processor | `SGLANG_RUST_BUILD_MODE=never` | off | the branch's `cargo` probe can hang the head before the HTTP server starts; PIL path is used |
 | Adaptive chunk sizer | `DSV41_ADAPTIVE_CHUNK` | off | superseded by the bounded indexer; it would only shrink chunks needlessly |
 | DSpark SPS table / ragged verify | `DSPARK_SPS_TABLE` | off (file absent) | crashes the Engram path on this model; verify-all schedule stays |
@@ -71,7 +71,7 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 | upstream TP4 example (from its README) | 45.4 | 72.9 | 103.1 (26.7) | 114.1 (23.2) | 134.2 (22.0) |
 | this profile, `Dockerfile` (base image) | 51.6 | 76.7 | 109.3 (28.5) | 160.9 (20.8) | 248.8 (16.7) |
 | this profile, `Dockerfile.canary` (upstream dsv4.1 branch) | 55.4 | 80.9 | 118.9 (30.7) | 178.2 (24.0) | 277.5 (18.6) |
-| **production** (`Dockerfile.canary-roce`, 2 MiB route, prefill TP split, both rails) | **57.0** | **81.7** | **118.6 (31.5)** | **185.1 (24.7)** | **290.7 (18.9)** |
+| **production** (`Dockerfile.canary-roce`, 2 MiB route, prefill TP split, both rails, fast load; 2026-09-18) | **57.5** | **79.2** | **121.6 (32.3)** | **183.4 (24.9)** | **285.0 (18.8)** |
 
 ### Code and structured decode, aggregate tok/s
 
@@ -79,7 +79,7 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 |---|---:|---:|---:|---:|
 | this profile, base image | 96.7 | 446.7 | 595.3 | 104.5 |
 | this profile, canary image | 100.4 | 513.3 | 838.6 | 108.0 |
-| **production** (see above) | **107.0** | **540.1** | **860.8** | **115.4** |
+| **production** (see above) | **107.7** | **539.2** | **863.6** | **116.7** |
 
 ### Prefill, cold, tok/s by prompt length
 
@@ -88,7 +88,7 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 | upstream example (chunk 1024) | 3350 | 3782 | 3768 | 3531 | 3251 | – |
 | this profile, base image (chunk 4096 + indexer backport) | 3532 | 4006 | 4038 | 3917 | 3230 | 2724 |
 | this profile, canary image | 3174 | 3982 | 4180 | 4010 | 3499 | 2701 |
-| **production** (canary-roce + prefill TP split) | **4070** | **4513** | **4554** | **4375** | **4364** | **3893** |
+| **production** (canary-roce + prefill TP split + fast load) | **2587** | **4641** | **4601** | **4647** | **4194** | **3910** |
 
 **Caveat on the prefill table:** sparkDash's prefill filler is one repeated token, so every filler token hits the same Engram row and the row cache (`DSV41_CACHE_GIB=4`) inflates those numbers (reported by koldfrontier in [MiaAI-Lab#21](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-DGX-Sparks/issues/21)). The same canary engine on random-word text, cold, one request per size, `prompt_tokens / TTFT`:
 
@@ -108,9 +108,9 @@ Long-context checks: needle retrieval PASS at 131k, 262k and **985k** tokens on 
 | target `load_weight` (rank 0 / 1 / 2 / 3) | 225–246 / 95 / 246 / 114 s | 71–74 / 83 / 73 / 71 s |
 | draft `load_weight` | 38–50 s | 3–8 s |
 | engine start to ready (`scheduler_e2e`) | 343–354 s | 124–129 s |
-| `max_total_num_tokens` (KV pool, same image, same night) | 7.47–7.82 M | 7.27 M (pinned buffers); 6.2–6.8 M with the earlier mmap buffers |
+| `max_total_num_tokens` (KV pool, same image, same night) | 7.47–7.82 M | 7.27 M and 6.71 M on two boots (pinned buffers); 6.2–6.8 M with the earlier mmap buffers |
 
-Same image, gate on versus off, 2026-09-18. Decode, prefill and the needle test are unchanged. The KV pool is 3–6 % smaller: SGLang sizes it from the head's `MemAvailable` right after the loads, and ~0.8 GB less is available then with the fast loader (with pageable buffers it was 1.5 GB, traced to driver staging memory; the remainder shows only as mapped file pages of the scheduler process). Flip `DSV41_FAST_LOAD=0` if the last 0.5 M tokens of pool matter more than 220 s per boot. Profile, dead ends and raw snapshots: [docs/fast-load.md](docs/fast-load.md).
+Same image, gate on versus off, 2026-09-18. Decode, prefill and the needle test are unchanged. The KV pool is 3–13 % smaller (it also varies more from boot to boot): SGLang sizes it from the head's `MemAvailable` right after the loads, and ~0.8 GB less is available then with the fast loader (with pageable buffers it was 1.5 GB, traced to driver staging memory; the remainder shows only as mapped file pages of the scheduler process). Flip `DSV41_FAST_LOAD=0` if the last 0.5–1 M tokens of pool matter more than 220 s per boot. Profile, dead ends and raw snapshots: [docs/fast-load.md](docs/fast-load.md).
 
 ## Quality gate
 
@@ -272,6 +272,7 @@ Tests: `tests/test_indexer_chunked.py` and `tests/test_indexer_chunked_v2.py` li
 - Any `#running-req` in the engine log above the concurrency being benched means foreign traffic landed in the window; the tables above were taken with none.
 - Greedy text equality is not a usable correctness gate on this stack: identical cold prompts of ~70k tokens produce different greedy continuations run to run. Correctness of the indexer backport rests on the bitwise CPU tests, upstream's in-forward `page_indices` comparison, the needle tests and the benches.
 - `scripts/window-20260916.sh` is the runbook that produced the tables (preflight, build, two boots, benches, rollback).
+- The production rows were re-measured on 2026-09-18 on the fast-load boot (`docs/results/fastload-20260918/prodbench-fastload-20260918.txt`): two warm-up prose c1 runs discarded, then one run per cell; prose c1 is the median of three runs (57.5, 59.2, 52.4), and the 4k prefill cell is a single cold point that read 2.4–3.6k across the night's boots.
 
 ## Rollback
 

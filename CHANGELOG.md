@@ -5,6 +5,8 @@ raw results live under `docs/results/`.
 
 ## 2026-09-18
 
+- `docs/upstream-watch.md`: re-checked every pinned piece (SGLang dsv4.1 head, #39187/#39704,
+  kernels, image, b12x, checkpoint); the SM121 candidate-indexer blocker still holds, pins stay.
 - **Faster boot: `adapter/fast_load.py`, gate `DSV41_FAST_LOAD=1`, on in production.** This
   rank's checkpoint tensors are read by a 16-thread `pread` pool into pinned host memory instead
   of being page-faulted through the loader's mmap at 0.5 GB/s; the model's async copies are paced

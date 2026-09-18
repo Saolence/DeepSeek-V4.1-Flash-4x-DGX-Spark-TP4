@@ -5,6 +5,8 @@ raw results live under `docs/results/`.
 
 ## 2026-09-18
 
+- `--sleep-on-idle` on (RustyAiLab's suggestion in Mia #16): idle head scheduler CPU 47 % → 14 %,
+  workers 5 %; first response after idle and decode unchanged.
 - `docs/upstream-watch.md`: re-checked every pinned piece (SGLang dsv4.1 head, #39187/#39704,
   kernels, image, b12x, checkpoint); the SM121 candidate-indexer blocker still holds, pins stay.
 - **Faster boot: `adapter/fast_load.py`, gate `DSV41_FAST_LOAD=1`, on in production.** This

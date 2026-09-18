@@ -276,6 +276,80 @@ NCCL INFO NET/IB ListenerRouting format=ipv4-v1 advertised=4 observed=4
 collapsing: `overriding dev 3 with dev 2` stays inside the second PCI root instead
 of reaching for `dev 0`.
 
+### The second plane's network has to exist before those flags can reach it
+
+The flags raise the *publication* bound; they do not give the second card a network.
+On the four Sparks the second ConnectX-7 came cabled and up (200G, link detected) but
+unconfigured: no IPv4, MTU 1500, and the RoCE v2 GID that `NCCL_IB_GID_INDEX` selects
+(index 3 here) reading back all-zero. NCCL cannot match a subnet for a device that has
+no GID at the selected index, so the channel plan names it and the port still carries
+nothing:
+
+```text
+NET/IB : Using [0]rocep1s0f0 [1]rocep1s0f1 [2]roceP2p1s0f0 [3]roceP2p1s0f1
+Channel 02/0 : 0[0] -> 1[0] [send] via NET/IB/2      <- moves nothing
+```
+
+`port_xmit_data` on `roceP2p1s0f0` stayed flat for the whole run while the first card
+carried 100 % of inter-node traffic — the 0.00 GB column in the table below. Setting the
+four flags without this step leaves the ports where they were: the flags decide whether a
+device may be advertised, the addressing decides whether there is a GID to advertise.
+
+Both ports of the second card are part of the ring, one cable each to the two neighbours,
+with the same geometry as the first card (`f0` to the next rank's `f1`). Each node
+therefore needs one address per cable, a 9000 MTU, and a route for the two /24s it does
+not sit on: those subnets exist only at the IP layer, through a transit neighbour.
+
+A minimal template, per node as `/etc/netplan/41-sparkring-plane2.yaml`. Cable `<i>` is
+the leg rank`i` -> rank`(i+1) mod 4`; shown for rank0, the other three are the same file
+with `i` shifted and the two /24s adapted (they are placeholders — use your own scheme):
+
+```yaml
+network:
+  version: 2
+  renderer: NetworkManager        # the Sparks' fabric ports are NetworkManager-managed
+  ethernets:
+    enP2p1s0f0np0:                # -> RDMA device roceP2p1s0f0
+      addresses: [10.10.0.10/24]  # cable 0, this end
+      dhcp4: false
+      dhcp6: false
+      mtu: 9000
+      optional: true             # never block boot on it
+      routes:
+      - to: 10.10.1.0/24          # cable 1, one hop away
+        via: 10.10.0.11           # rank1's f1, on this cable
+    enP2p1s0f1np1:                # -> RDMA device roceP2p1s0f1
+      addresses: [10.10.3.11/24]  # cable 3, this end
+      dhcp4: false
+      dhcp6: false
+      mtu: 9000
+      optional: true
+      routes:
+      - to: 10.10.2.0/24          # cable 2, one hop away
+        via: 10.10.3.10           # rank3's f0, on this cable
+```
+
+`sudo netplan apply`, then confirm the four addresses and the MTU are up
+(`ip -br addr`, `ip -d link show enP2p1s0f0np0`) and that the interface names still
+map to the `IB_HCA` list you set. The network is only right when the counters agree:
+with the addressing and the four flags in place the second root moved 63.60 GB under a
+64k prefill plus 16 streams and took 49.7 % of inter-node traffic, and the routing
+record reads
+
+```text
+NET/IB: Subnet-aware routing: overriding dev 3 with dev 2 preserving PCI root pci0002:00
+```
+
+instead of collapsing to `dev 0`. Keep that order when debugging — addressing first,
+then the flags, then the counters. The `NET` subsys stays useful here: this record is
+the only place that states which root a channel landed on.
+
+Removing the plane takes two steps, not one: NetworkManager can write its own
+`/etc/netplan/90-NM-*.yaml` stanzas for these interfaces, and any of those that survive
+bring the addresses back on the next `netplan apply` (`grep -l enP2p1s /etc/netplan/*`).
+If you are rolling the plane back completely, `rm` those too and flush the addresses
+(`ip addr flush dev enP2p1s0f0np0 enP2p1s0f1np1`).
+
 ### Channel count
 
 `NCCL_MIN_NCHANNELS` and `NCCL_MAX_NCHANNELS` decide how many channels share the

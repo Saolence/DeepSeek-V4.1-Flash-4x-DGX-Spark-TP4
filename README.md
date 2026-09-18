@@ -32,7 +32,7 @@ One image, one env file. Everything in the tables below labelled **production** 
 | NCCL | `IB_HCA=rocep1s0f0,roceP2p1s0f0` | on | neutral within noise, kept for the remaining collectives |
 | Fabric | switched RoCE, tree reachable | on | every default assumes a switch; a switchless ring sets `NCCL_SWITCHLESS_RING_ONLY=1` instead (see below) |
 | Serving | `--enable-cache-report`, `--min-free-slots-delay 1`, `DSV41_MAX_NEW_TOKENS`, loop abort, thinking alias | on | cached-token usage for clients; the rest is upstream's |
-| Weight loading | `DSV41_FAST_LOAD=1` (+ `--model-loader-extra-config {"num_threads":1}`) | **off, pending** | engine start 356 s → 125 s with bytes identical, decode/prefill/needle unchanged; the version measured on the fleet costs 10–14 % of the KV pool (driver staging memory behind pageable copies), the pinned-buffer fix is written and unit-tested but its fleet boot is still owed ([docs/fast-load.md](docs/fast-load.md)) |
+| Weight loading | `DSV41_FAST_LOAD=1` (+ `--model-loader-extra-config {"num_threads":1}`) | **on** | engine start 343 s → 124 s, bytes identical, decode/prefill/needle unchanged; costs 3–6 % of the KV pool (7.27 M vs 7.47–7.82 M tokens on the same image), which is the one trade-off in this table ([docs/fast-load.md](docs/fast-load.md)) |
 | Rust image processor | `SGLANG_RUST_BUILD_MODE=never` | off | the branch's `cargo` probe can hang the head before the HTTP server starts; PIL path is used |
 | Adaptive chunk sizer | `DSV41_ADAPTIVE_CHUNK` | off | superseded by the bounded indexer; it would only shrink chunks needlessly |
 | DSpark SPS table / ragged verify | `DSPARK_SPS_TABLE` | off (file absent) | crashes the Engram path on this model; verify-all schedule stays |
@@ -105,12 +105,12 @@ Long-context checks: needle retrieval PASS at 131k, 262k and **985k** tokens on 
 
 | | stock loader | fast load (`DSV41_FAST_LOAD=1`) |
 |---|---:|---:|
-| target `load_weight` (rank 0 / 1 / 2 / 3) | 228 / 95 / 246 / 114 s | 74 / 83 / 73 / 71 s |
-| draft `load_weight` | 38–50 s | 3–6 s |
-| engine start to ready (`scheduler_e2e`) | 346–354 s | 125–129 s |
-| `max_total_num_tokens` (KV pool, same image, same night) | 7.47–7.82 M | 6.2–6.8 M with the mmap-buffer version |
+| target `load_weight` (rank 0 / 1 / 2 / 3) | 225–246 / 95 / 246 / 114 s | 71–74 / 83 / 73 / 71 s |
+| draft `load_weight` | 38–50 s | 3–8 s |
+| engine start to ready (`scheduler_e2e`) | 343–354 s | 124–129 s |
+| `max_total_num_tokens` (KV pool, same image, same night) | 7.47–7.82 M | 7.27 M (pinned buffers); 6.2–6.8 M with the earlier mmap buffers |
 
-Same image, gate on versus off, 2026-09-18. Decode, prefill and the needle test are unchanged; the KV pool is not, which is why the gate ships off: the cause and the fix (pinned buffers) are in [docs/fast-load.md](docs/fast-load.md), the confirming boot is still owed.
+Same image, gate on versus off, 2026-09-18. Decode, prefill and the needle test are unchanged. The KV pool is 3–6 % smaller: SGLang sizes it from the head's `MemAvailable` right after the loads, and ~0.8 GB less is available then with the fast loader (with pageable buffers it was 1.5 GB, traced to driver staging memory; the remainder shows only as mapped file pages of the scheduler process). Flip `DSV41_FAST_LOAD=0` if the last 0.5 M tokens of pool matter more than 220 s per boot. Profile, dead ends and raw snapshots: [docs/fast-load.md](docs/fast-load.md).
 
 ## Quality gate
 

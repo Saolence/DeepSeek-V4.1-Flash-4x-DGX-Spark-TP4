@@ -21,7 +21,8 @@ raw results live under `docs/results/`.
   Engine start 343–354 s → 111–129 s, values bitwise identical, decode/prefill/needle unchanged.
   Trade-off: the KV pool is 3–13 % smaller (6.71–7.27 M vs 7.47–7.82 M tokens) and varies more
   between boots. Profile, dead ends and memory accounting: `docs/fast-load.md`.
-- Production decode/prefill rows in the README re-measured on the fast-load boot.
+- Production decode/prefill rows in the README re-measured on the final boot (fast load + Engram
+  prefetch): prose c1 61.0 / c16 292.9, code c1 113.3 / c16 882.4, structured 124.1.
 - Merged from Saolence: #5 (worker containers mount the same NCCL as the head, worker preflight
   actually runs), #6 (anchored rsync excludes in `build`, `BUILD_DOCKERFILE`, `BUILD_ARGS`,
   `PIP_INDEX` mirror knob), #2 (second-plane addressing for the ring, docs). `PIP_INDEX` also

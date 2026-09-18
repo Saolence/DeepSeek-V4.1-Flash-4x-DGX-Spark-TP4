@@ -1,0 +1,19 @@
+prose c1 per 60.99 agg 60.99
+prose c1 per 61.2 agg 61.2
+prose c1 per 60.99 agg 60.99
+prose c2 per 43.39 agg 85.9
+prose c4 per 33.23 agg 125.18
+prose c8 per 24.29 agg 178.88
+prose c16 per 19.34 agg 292.87
+code c1 per 113.29 agg 113.29
+code c8 per 68.55 agg 548.26
+code c16 per 55.16 agg 882.35
+structured c1 per 124.11 agg 124.11
+prefill 4119 tok/s 3202.04
+prefill 16408 tok/s 3497.41
+prefill 32787 tok/s 4664.6
+prefill 65555 tok/s 4674.26
+prefill 131087 tok/s 4539.41
+prefill 262165 tok/s 4241.14
+10
+BENCH-DONE

@@ -101,6 +101,12 @@ EXPECTED_SHARDS="${EXPECTED_SHARDS:-48}"
 
 BASE_IMAGE="${BASE_IMAGE:-lmsysorg/sglang:dev-dsv41}"
 IMAGE="${IMAGE:-dsv41-3x-spark:local}"
+# What `build` compiles, and extra flags for it. A site that runs one of the optional
+# canary images sets BUILD_DOCKERFILE=Dockerfile.canary so `./start.sh build` produces
+# $IMAGE from the recipe the profile names instead of retagging it with the base one;
+# BUILD_ARGS carries the rest, e.g. --build-arg PIP_INDEX=<mirror> without pypi.org.
+BUILD_DOCKERFILE="${BUILD_DOCKERFILE:-Dockerfile}"
+BUILD_ARGS="${BUILD_ARGS:-}"
 HEAD_CTN="${HEAD_CTN:-dsv41-head}"
 WORKER_CTN="${WORKER_CTN:-dsv41-worker}"
 WORKER_DIR="${WORKER_DIR:-/home/${WORKER_USER}/dsv41-3x-spark}"
@@ -605,11 +611,14 @@ cmd_pull() {
 }
 
 cmd_build() {
-  info "=== build $IMAGE from $ROOT ==="
+  info "=== build $IMAGE from $ROOT ($BUILD_DOCKERFILE) ==="
   if ! docker image inspect "$BASE_IMAGE" >/dev/null 2>&1; then
     cmd_pull
   fi
-  docker build -t "$IMAGE" "$ROOT"
+  local dockerfile="$BUILD_DOCKERFILE"
+  case "$dockerfile" in /*) die "BUILD_DOCKERFILE must be inside the repository (got $dockerfile)";; esac
+  [[ -f "$ROOT/$dockerfile" ]] || die "no such Dockerfile: $ROOT/$dockerfile"
+  docker build -f "$ROOT/$dockerfile" -t "$IMAGE" $BUILD_ARGS "$ROOT"
   local img_arch
   img_arch=$(docker image inspect -f '{{.Architecture}}' "$IMAGE")
   [[ "$img_arch" == "arm64" ]] || die "expected arm64 image, got $img_arch"
@@ -620,15 +629,18 @@ cmd_build() {
   for h in "${WORKER_HOSTS[@]}"; do
     info "rsync recipe → $h:$WORKER_DIR"
     remote_on "$h" "mkdir -p $(printf '%q' "$WORKER_DIR")"
-    rsync -aH --delete --exclude '.env' --exclude '.env.tp4' --exclude 'state' --exclude 'state-tp4' \
-      --exclude 'logs' --exclude 'logs-tp4' --exclude 'models' \
-      --exclude 'engram' \
+    # Anchored on purpose: an unanchored `models` also matches .../sglang/srt/models,
+    # and an excluded directory is never transferred, so the worker's copy goes stale.
+    rsync -aH --delete --exclude '.env' --exclude '.env.tp4' \
+      --exclude '/state' --exclude '/state-tp4' \
+      --exclude '/logs' --exclude '/logs-tp4' --exclude '/models' \
+      --exclude '/engram' \
       -e "$(ssh_rsync_e)" \
       "$ROOT/" "${WORKER_USER}@${h}:${WORKER_DIR}/"
     info "docker build on $h ..."
     remote_on "$h" --timeout "${BUILD_TIMEOUT:-0}" \
       "docker image inspect $(printf '%q' "$BASE_IMAGE") >/dev/null || docker pull --platform linux/arm64 $(printf '%q' "$BASE_IMAGE")
-       cd $(printf '%q' "$WORKER_DIR") && docker build -t $(printf '%q' "$IMAGE") ."
+       cd $(printf '%q' "$WORKER_DIR") && docker build -f $(printf '%q' "$dockerfile") -t $(printf '%q' "$IMAGE") $BUILD_ARGS ."
   done
   info "overlay image on all 3 nodes"
 }

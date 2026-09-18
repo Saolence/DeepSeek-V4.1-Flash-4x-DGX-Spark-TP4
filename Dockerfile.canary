@@ -10,7 +10,11 @@
 #   docker build -f Dockerfile.canary -t dsv41-4x-spark:canary .    # on every node
 #   IMAGE=dsv41-4x-spark:canary in .env.tp4, plus SGLANG_DSPARK_FOLDED_SAMPLING=2
 FROM lmsysorg/sglang:dev-dsv41
-RUN pip install --no-deps --no-cache-dir "sglang-kernel==0.4.7" "sgl-deep-gemm==0.2.0"
+# The two kernel wheels come from PyPI. A network without pypi.org points this at a
+# mirror: `docker build --build-arg PIP_INDEX=https://<mirror>/simple`, or BUILD_ARGS
+# in .env.tp4 when `./start.sh build` builds the image for you.
+ARG PIP_INDEX=https://pypi.org/simple
+RUN pip install --no-deps --no-cache-dir -i "$PIP_INDEX" "sglang-kernel==0.4.7" "sgl-deep-gemm==0.2.0"
 RUN rm -rf /sgl-workspace/sglang/python
 COPY runtime/sglang-canary/python /sgl-workspace/sglang/python
 RUN python3 -c "import sglang, sglang.srt.models.deepseek_v4, sglang.srt.layers.attention.deepseek_v4_backend, sglang.srt.models.deepseek_v4_dspark; print('import ok')"

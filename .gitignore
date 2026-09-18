@@ -35,6 +35,6 @@ __pycache__/
 .idea/
 .vscode/
 
-# staged by scripts/fetch-sglang-canary.sh
-runtime/sglang-canary/python/
-runtime/sglang-canary/src.tgz
+# staged by scripts/fetch-sglang-canary.sh (pinned, never tracked -- the script also
+# writes REF and src.tgz, and any of them left out here shows up as untracked noise)
+runtime/sglang-canary/

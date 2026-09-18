@@ -57,12 +57,119 @@ Use a separate `/24` per cable, or one `/24` with `NCCL_IB_SUBNET_PREFIX_LEN=24`
 management LAN on a different interface (`GLOO_SOCKET_IFNAME`, `NCCL_SOCKET_IFNAME`)
 — the ring carries the data plane only.
 
+### Names on the host
+
+"CX7-0" and "CX7-1" are the diagram's names, not the OS's. Each card exposes two
+functions, and both the interface and the RDMA device carry the slot and port:
+
+| Diagram | Linux interface | RDMA device (`IB_HCA`) |
+|---|---|---|
+| first card, port 0 | `enp1s0f0np0` | `rocep1s0f0` |
+| first card, port 1 | `enp1s0f1np1` | `rocep1s0f1` |
+| second card, port 0 | `enP2p1s0f0np0` | `roceP2p1s0f0` |
+| second card, port 1 | `enP2p1s0f1np1` | `roceP2p1s0f1` |
+
+`IB_HCA` takes the RDMA device names, not the interfaces. On a node you have not seen
+before, these two commands identify them:
+
+```bash
+ls /sys/class/infiniband/                                     # the RDMA devices
+for d in /sys/class/infiniband/*; do echo -n "$d -> "; ls "$d/device/net"; done   # device -> interface
+```
+
+### Addressing
+
+One `/24` per cable with `.10` and `.11` at the two ends is what this fleet runs, and it
+is the shape `NCCL_IB_SUBNET_AWARE_ROUTING=1` with `NCCL_IB_SUBNET_PREFIX_LEN=24`
+expects: a device is matched to the subnet of the peer it is talking to, and a rank only
+needs routes for the two cables it is not attached to. One flat `/24` for all four cables
+also works -- then set the prefix length to cover all eight ends and skip the routes.
+
+| cable | between | subnet | rank0 | rank1 | rank2 | rank3 |
+|---|---|---|---|---|---|---|
+| 1 | rank0-rank1 | `10.9.0.0/24` | `10.9.0.10` | `10.9.0.11` | | |
+| 2 | rank1-rank2 | `10.9.1.0/24` | | `10.9.1.10` | `10.9.1.11` | |
+| 3 | rank2-rank3 | `10.9.2.0/24` | | | `10.9.2.10` | `10.9.2.11` |
+| 4 | rank3-rank0 | `10.9.3.0/24` | `10.9.3.11` | | | `10.9.3.10` |
+
+Rank0's two ports as an example; every rank mirrors it with its own neighbours:
+
+```ini
+# enp1s0f0np0 -- the cable-1 end, next hop rank1
+addresses: [10.9.0.10/24]
+routes: to 10.9.1.0/24 via 10.9.0.11
+# enp1s0f1np1 -- the cable-4 end, next hop rank3
+addresses: [10.9.3.11/24]
+routes: to 10.9.2.0/24 via 10.9.3.10
+```
+
+MTU 9000 on every ring port. The subnets are placeholders -- one block per cable, with a
+prefix length that matches the one NCCL is given. A second card, if you cable it, gets a
+second block of four subnets and the same geometry, as in
+[Devices past the second are never advertised](#devices-past-the-second-are-never-advertised).
+
+## The patched NCCL
+
+The switch needs a library carrying `sparkring`'s switchless-cycle change. Nothing in
+this tree ships it, the image's own NCCL is a stock build, and the preflight refuses a
+library without the marker -- so this is the one artefact the deployment has to bring.
+
+| | |
+|---|---|
+| Where | `NCCL_HOST_DIR`, default `$HOME/nccl-2.30.7`, on **every** node: the head mounts it read-only into its container, and so does each worker |
+| File name | `libnccl.so.2.30.7` or `libnccl.so.2`. Any other name is ignored without a warning, and the container silently falls back to the image's NCCL |
+| Marker | `grep -qa SWITCHLESS_RING_ONLY libnccl.so.2.30.7` must succeed |
+| GID | the port-1 RoCE v2 GID at `NCCL_IB_GID_INDEX` has to be populated and identical on every rank |
+
+**Route A: the published native runtime.** `sparkring` ships a qualified aarch64 build;
+this is the one this fleet runs, hashes included:
+
+| | |
+|---|---|
+| Release | `native-runtime-sm121-aa8fa11831af`, asset `native-runtime-files-20260908.tar` |
+| tar sha256 | `aa8fa11831afaa4539e0b74442fd1ea25dd8cf49ad5edb6fd95e7f05fdf5ce86` |
+| `libnccl.so.2.30.7` sha256 | `768a450b5eb84bf3d1191795350e43c96de75aeba4783ec314d47672fe6e1fc6` |
+
+```bash
+mkdir -p ~/nccl-2.30.7 && cd ~/nccl-2.30.7
+sha256sum native-runtime-files-20260908.tar     # compare against the tar hash above
+tar -xf native-runtime-files-20260908.tar      # carries the qualified libnccl.so.2.30.7
+ln -sf libnccl.so.2.30.7 libnccl.so.2
+grep -qa SWITCHLESS_RING_ONLY libnccl.so.2.30.7 && echo 'marker ok'
+```
+
+**Route B: build it.** Base `NVIDIA/nccl` v2.30.7-1 (`73cf112295c33aee2b895f329f592f2a9b4b0f97`)
+with `nccl-2.30.7-dual-pci-domain.patch` from
+[sparkring](https://github.com/FujitsuPolycom/sparkring/blob/main/spark_transport/nccl/DUAL_PCI_DOMAIN.md),
+applied **alone** -- it already contains the switchless-cycle change, and the two must
+not be layered. Build the aarch64/SM121 target the way that document describes, then
+install the result as `libnccl.so.2.30.7` plus the `libnccl.so.2` symlink.
+
+**Checking it landed.** `doctor` runs the preflight on the head and on every worker
+before any container is replaced:
+
+```text
+[+] switchless ring: config OK (NNODES=4 TP=4 EP=2, IB_HCA=rocep1s0f0,rocep1s0f1)
+[+] switchless ring: head preflight OK (RoCEv2 GID index 3)
+[+] switchless ring: 10.0.0.2 preflight OK (RoCEv2 GID index 3)
+[+] switchless ring: 10.0.0.3 preflight OK (RoCEv2 GID index 3)
+[+] switchless ring: 10.0.0.4 preflight OK (RoCEv2 GID index 3)
+```
+
+One caveat before customising it: the head honours `NCCL_HOST_DIR`, but `serve`'s worker
+heredoc still looks for `$HOME/nccl-2.30.7` on the worker and passes it through
+`LD_LIBRARY_PATH` instead of overlaying the pip library the way the head does
+(`start.sh:750-754` against `:79`). Keeping the default path on every node is what makes
+the two agree; a worker that finds nothing there starts on the image's NCCL with no
+warning. `doctor`'s worker preflight is not affected -- it uses `NCCL_WORKER_DIR`
+(`files/nccl.sh:228`), so it can pass while `serve` takes the other path.
+
 ## Setup
 
-1. Build/install the patched NCCL into `NCCL_HOST_DIR` (default `$HOME/nccl-2.30.7`)
-   on **every** node. The library must contain the `SWITCHLESS_RING_ONLY` marker;
-   the preflight rejects a stock build, so a wrong library fails before any
-   container is replaced rather than at NCCL init.
+1. Install the patched NCCL from [The patched NCCL](#the-patched-nccl) into
+   `NCCL_HOST_DIR` (default `$HOME/nccl-2.30.7`) on **every** node. The preflight
+   rejects a stock build, so a wrong library fails before any container is replaced
+   rather than at NCCL init.
 
 2. Put a local checkpoint on every node and set `NFS_SHARE=0`. A ring has no
    fabric-wide NFS path, so the tested configuration keeps its own copy of the

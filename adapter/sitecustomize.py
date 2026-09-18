@@ -50,6 +50,17 @@ class EngramLoader(importlib.abc.Loader):
         elif module.__name__ == 'sglang.srt.entrypoints.openai.serving_chat':
             from encoding_compat import install_serving_chat
             install_serving_chat(module)
+        elif module.__name__ == 'sglang.srt.model_loader.weight_utils':
+            # Gated on DSV41_FAST_LOAD: this rank's tensors are read eagerly by a thread
+            # pool instead of page-faulted through the loader's mmap (adapter/fast_load.py).
+            from fast_load import install_weight_utils
+            install_weight_utils(module)
+        elif module.__name__ == 'sglang.srt.models.deepseek_v4':
+            from fast_load import install_deepseek_v4
+            install_deepseek_v4(module)
+        elif module.__name__ == 'sglang.srt.models.deepseek_v4_dspark':
+            from fast_load import install_dspark
+            install_dspark(module)
         elif module.__name__ == 'sglang.srt.managers.schedule_batch':
             from loop_abort import install as install_loop_abort
             install_loop_abort(module)
@@ -76,6 +87,9 @@ class EngramFinder(importlib.abc.MetaPathFinder):
                             'sglang.srt.layers.attention.deepseek_v4_backend',
                             'sglang.srt.entrypoints.openai.encoding_dsv41',
                             'sglang.srt.entrypoints.openai.serving_chat',
+                            'sglang.srt.model_loader.weight_utils',
+                            'sglang.srt.models.deepseek_v4',
+                            'sglang.srt.models.deepseek_v4_dspark',
                             'sglang.srt.managers.schedule_batch',
                             'sglang.srt.layers.attention.dsv4.metadata'):
             return None

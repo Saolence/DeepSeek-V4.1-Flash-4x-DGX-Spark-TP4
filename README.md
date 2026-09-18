@@ -32,12 +32,13 @@ One image, one env file. Everything in the tables below labelled **production** 
 | NCCL | `IB_HCA=rocep1s0f0,roceP2p1s0f0` | on | neutral within noise, kept for the remaining collectives |
 | Fabric | switched RoCE, tree reachable | on | every default assumes a switch; a switchless ring sets `NCCL_SWITCHLESS_RING_ONLY=1` instead (see below) |
 | Serving | `--enable-cache-report`, `--min-free-slots-delay 1`, `DSV41_MAX_NEW_TOKENS`, loop abort, thinking alias | on | cached-token usage for clients; the rest is upstream's |
+| Weight loading | `DSV41_FAST_LOAD=1` (+ `--model-loader-extra-config {"num_threads":1}`) | **off, pending** | engine start 356 s → 125 s with bytes identical, decode/prefill/needle unchanged; the version measured on the fleet costs 10–14 % of the KV pool (driver staging memory behind pageable copies), the pinned-buffer fix is written and unit-tested but its fleet boot is still owed ([docs/fast-load.md](docs/fast-load.md)) |
 | Rust image processor | `SGLANG_RUST_BUILD_MODE=never` | off | the branch's `cargo` probe can hang the head before the HTTP server starts; PIL path is used |
 | Adaptive chunk sizer | `DSV41_ADAPTIVE_CHUNK` | off | superseded by the bounded indexer; it would only shrink chunks needlessly |
 | DSpark SPS table / ragged verify | `DSPARK_SPS_TABLE` | off (file absent) | crashes the Engram path on this model; verify-all schedule stays |
 | NVFP4 checkpoint (`nvidia/DeepSeek-V4.1-Flash-NVFP4`) | – | not used | routed experts only, no bandwidth saved on GB10, +16 GiB, DSpark unvalidated |
 
-Rollback to any earlier point is an env change: `SGLANG_ROCE_ALLREDUCE=0` drops the RDMA transport, `SPARK_PREFILL_TP_SPLIT=0` the row split, `IMAGE=dsv41-4x-spark:canary` the RoCEnante overlay, `IMAGE=dsv41-4x-spark:local` the branch.
+Rollback to any earlier point is an env change: `DSV41_FAST_LOAD=0` restores the stock loader, `SGLANG_ROCE_ALLREDUCE=0` drops the RDMA transport, `SPARK_PREFILL_TP_SPLIT=0` the row split, `IMAGE=dsv41-4x-spark:canary` the RoCEnante overlay, `IMAGE=dsv41-4x-spark:local` the branch.
 
 ## What this profile changes
 
@@ -99,6 +100,17 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 Use these rows for real prompts; the sparkDash column overstates by 9–20 % at 16k–128k. The v3 row's 12k value is a single cold request right after boot (the split does not engage below 32k).
 
 Long-context checks: needle retrieval PASS at 131k, 262k and **985k** tokens on the canary image (985k cold prefill 732 s, head `MemAvailable` low-water 6.6 GiB) and on production (131k 25.6 s, 262k 58 s, **985k 585 s**, low-water 5.0 GiB). The split without the chunked scoring (SG18 as published, base image) reached 503 s at 985k but left only 1.9 GiB on the head, which is why v3 keeps the 2 GiB logits budget inside each rank's partition.
+
+### Boot time
+
+| | stock loader | fast load (`DSV41_FAST_LOAD=1`) |
+|---|---:|---:|
+| target `load_weight` (rank 0 / 1 / 2 / 3) | 228 / 95 / 246 / 114 s | 74 / 83 / 73 / 71 s |
+| draft `load_weight` | 38–50 s | 3–6 s |
+| engine start to ready (`scheduler_e2e`) | 346–354 s | 125–129 s |
+| `max_total_num_tokens` (KV pool, same image, same night) | 7.47–7.82 M | 6.2–6.8 M with the mmap-buffer version |
+
+Same image, gate on versus off, 2026-09-18. Decode, prefill and the needle test are unchanged; the KV pool is not, which is why the gate ships off: the cause and the fix (pinned buffers) are in [docs/fast-load.md](docs/fast-load.md), the confirming boot is still owed.
 
 ## Quality gate
 
@@ -250,8 +262,9 @@ All adapters are import hooks in `adapter/sitecustomize.py`, gated by an environ
 | `adapter/indexer_chunked.py` | `DSV41_INDEXER_CHUNKED` | sglang#39187 adapted to the `dev-dsv41` image backend (`self.candidate_masks`) |
 | `adapter/indexer_chunked_v2.py` | `DSV41_INDEXER_CHUNKED` | sglang#39187 verbatim, for the `candidate_metadata` backend of the `dsv4.1` branch (kept for reference) |
 | `adapter/indexer_chunked_v3.py` + `spark_prefill_dense.py` | `DSV41_INDEXER_CHUNKED`, `SPARK_PREFILL_TP_SPLIT` | v2 plus the SG18 prefill TP split inside the chunked path; `sitecustomize` picks v1 or v3 from the stock source |
+| `adapter/fast_load.py` | `DSV41_FAST_LOAD` | Checkpoint tensors this rank will copy (owned experts, no Engram tables) read eagerly by a 16-thread `pread` pool into pinned host memory and returned from `safe_open`; the model's async copies paced to a byte budget so the reads stay just ahead; the DSpark draft load opens only the `mtp.*` shards. Loader-only: the model still does every narrow and copy |
 
-Tests: `tests/test_indexer_chunked.py` and `tests/test_indexer_chunked_v2.py` lift the stock function out of the engine's source, drive it and the backport with deterministic fake kernels, and require bitwise-equal `page_indices`, `raw_indices` and candidate masks over six scenarios (ragged batches, empty requests, full and tail-only mask publishing, mask consumption, one row per chunk up to a single chunk). Both run inside the image build (`Dockerfile` runs v1, `Dockerfile.canary` runs v2), together with upstream's thinking-alias, output-cap and loop-abort tests.
+Tests: `tests/test_indexer_chunked.py` and `tests/test_indexer_chunked_v2.py` lift the stock function out of the engine's source, drive it and the backport with deterministic fake kernels, and require bitwise-equal `page_indices`, `raw_indices` and candidate masks over six scenarios (ragged batches, empty requests, full and tail-only mask publishing, mask consumption, one row per chunk up to a single chunk). Both run inside the image build (`Dockerfile` runs v1, `Dockerfile.canary` runs v2), together with upstream's thinking-alias, output-cap and loop-abort tests. `tests/test_fast_load_pacing.py` (all images) checks the copy pacing; the in-image checkpoint test for the eager reads (bitwise equality against the stock `safe_open` for every dtype, draft shard filtering, memory release) needs the weights mounted and is described in `docs/fast-load.md`.
 
 ## Measurement notes
 

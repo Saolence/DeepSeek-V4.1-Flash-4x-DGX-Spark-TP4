@@ -13,6 +13,7 @@ COPY benchmarks /opt/dsv41/benchmarks
 RUN PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_thinking_alias.py \
  && PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_max_new_tokens.py \
  && PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_loop_abort.py \
+ && PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_fast_load_pacing.py \
  && cd /opt/dsv41/tests && CUDA_VISIBLE_DEVICES= PYTHONPATH=/opt/dsv41/adapter python3 test_indexer_chunked.py /sgl-workspace/sglang/python/sglang/srt/layers/attention/deepseek_v4_backend.py
 ENV PYTHONPATH=/opt/dsv41/adapter \
     MODEL_PATH=/models/DeepSeek-V4.1-Flash \

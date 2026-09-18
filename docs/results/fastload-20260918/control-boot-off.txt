@@ -1,0 +1,11 @@
+[2026-09-17 22:53:53 TP0 EP0] Load weight end. elapsed=228.22 s, type=DeepseekV4ForCausalLM, quant=fp8, avail mem=37.47 GB, mem usage=74.79 GB.
+[2026-09-17 22:55:05 TP0 EP0] Load weight end. elapsed=50.27 s, type=DeepseekV4ForCausalLMDSpark, quant=fp8, avail mem=35.89 GB, mem usage=1.34 GB.
+[2026-09-17 22:55:43 TP0 EP0] max_total_num_tokens=7821824, chunked_prefill_size=4096, max_prefill_tokens=16384, max_running_requests=16, context_len=1048576, available_gpu_mem=14.42 GB
+[2026-09-17 22:55:43] Engine startup timings (s): load_weight=278.49, kv_cache_allocation=14.50, scheduler_e2e=353.93, cuda_graph={prefill=0.00, decode=0.00, target_verify=8.85, draft_prefill=0.00, dr
+[2026-09-17 22:51:40 TP1 EP0] Load weight end. elapsed=95.09 s, type=DeepseekV4ForCausalLM, quant=fp8, avail mem=39.38 G
+[2026-09-17 22:54:59 TP1 EP0] Load weight end. elapsed=44.85 s, type=DeepseekV4ForCausalLMDSpark, quant=fp8, avail mem=3
+[2026-09-17 22:54:12 TP2 EP1] Load weight end. elapsed=246.45 s, type=DeepseekV4ForCausalLM, quant=fp8, avail mem=41.69 
+[2026-09-17 22:55:05 TP2 EP1] Load weight end. elapsed=50.28 s, type=DeepseekV4ForCausalLMDSpark, quant=fp8, avail mem=4
+[2026-09-17 22:51:59 TP3 EP1] Load weight end. elapsed=114.41 s, type=DeepseekV4ForCausalLM, quant=fp8, avail mem=41.95 
+[2026-09-17 22:54:53 TP3 EP1] Load weight end. elapsed=37.91 s, type=DeepseekV4ForCausalLMDSpark, quant=fp8, avail mem=3
+CONTROL-DONE

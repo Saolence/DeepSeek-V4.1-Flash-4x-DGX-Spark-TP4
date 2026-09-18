@@ -1,0 +1,8 @@
+[2026-09-17 21:02:00 TP0 EP0] Load weight begin. avail mem=112.71 GB
+[2026-09-17 21:02:54 TP0 EP0] Finished streaming dequant fp8 wo_a
+[2026-09-17 21:05:48 TP0 EP0] Load weight end. elapsed=228.48 s, type=DeepseekV4ForCausalLM, quant=fp8, avail mem=37.86 GB, mem usage=74.85 GB.
+[2026-09-17 21:06:33 TP0 EP0] Load weight begin. avail mem=37.62 GB
+[2026-09-17 21:07:24 TP0 EP0] Finished streaming dequant fp8 wo_a
+[2026-09-17 21:07:24 TP0 EP0] Load weight end. elapsed=51.17 s, type=DeepseekV4ForCausalLMDSpark, quant=fp8, avail mem=35.74 GB, mem usage=1.88 GB.
+[2026-09-17 21:08:15] Engine startup timings (s): load_weight=279.65, kv_cache_allocation=11.74, scheduler_e2e=389.47, cuda_graph={prefill=0.00, decode=0.00, ta
+DONE

@@ -1,0 +1,43 @@
+
+[00:38:41] startup
+[2026-09-17 22:36:08] DSV41 fast load ARMED: eager threaded reads of this rank's tensors; draft load opens only mtp shards
+[2026-09-17 22:36:11] DSV41 fast load: weight copies paced to 6.0 GB in flight
+DSV41 fast load ARMED: eager threaded reads of this rank's tensors; draft load opens only mtp shards
+[2026-09-17 22:36:17 TP0 EP0] DSV41 fast load: weight copies paced to 6.0 GB in flight
+[2026-09-17 22:36:39 TP0 EP0] DSV41 fast load: target layout ep=(0, 2) n_routed_experts=384 first shard /models/DeepSeek-V4.1-Flash/model-00001-of-00048.safetensors
+[2026-09-17 22:37:47 TP0 EP0] Load weight end. elapsed=72.92 s, type=DeepseekV4ForCausalLM, quant=fp8, avail mem=34.61 GB, mem usage=77.50 GB.
+[2026-09-17 22:38:00 TP0 EP0] DSV41 fast load: phase=target read 155.2 GB eagerly over 45 shards, 0 shards skipped; after release: 2 anonymous maps alive (0.00 GB), RSS 3622 MB
+[2026-09-17 22:38:05 TP0 EP0] DSV41 fast load: phase=draft read 7.9 GB eagerly over 3 shards, 45 shards skipped; after release: 2 anonymous maps alive (0.00 GB), RSS 3073 MB
+[2026-09-17 22:38:05 TP0 EP0] Load weight end. elapsed=5.84 s, type=DeepseekV4ForCausalLMDSpark, quant=fp8, avail mem=33.61 GB, mem usage=1.46 GB.
+[2026-09-17 22:38:24 TP0 EP0] max_total_num_tokens=6372352, chunked_prefill_size=4096, max_prefill_tokens=16384, max_running_requests=16, context_len=1048576, available_gpu_mem=16.16 GB
+[2026-09-17 22:38:24] Engine startup timings (s): load_weight=78.76, kv_cache_allocation=0.67, scheduler_e2e=128.94, cuda_graph={prefill=0.00, decode=0.00, target_verify=7.78, draft_prefill=0.00, draft_decode=2.48, draft
+[2026-09-17 22:37:57 TP1 EP0] Load weight end. elapsed=82.65 s, type=DeepseekV4ForCausalLM, quant=fp8, avail mem=37.11 GB, mem usage=76.91 GB.
+[2026-09-17 22:38:00 TP1 EP0] DSV41 fast load: phase=target read 155.2 GB eagerly over 45 shards, 0 shards skipped; after release: 1 anonymous maps alive (0.00 GB), RSS 3652 MB
+[2026-09-17 22:38:04 TP1 EP0] DSV41 fast load: phase=draft read 7.9 GB eagerly over 3 shards, 45 shards skipped; after release: 1 anonymous maps alive (0.00 GB), RSS 3104 MB
+[2026-09-17 22:38:04 TP1 EP0] Load weight end. elapsed=5.57 s, type=DeepseekV4ForCausalLMDSpark, quant=fp8, avail mem=35.33 GB, mem usage=1.78 GB.
+[2026-09-17 22:37:44 TP2 EP1] Load weight end. elapsed=69.67 s, type=DeepseekV4ForCausalLM, quant=fp8, avail mem=36.88 GB, mem usage=76.84 GB.
+[2026-09-17 22:38:00 TP2 EP1] DSV41 fast load: phase=target read 155.2 GB eagerly over 45 shards, 0 shards skipped; after release: 1 anonymous maps alive (0.00 GB), RSS 3652 MB
+[2026-09-17 22:38:04 TP2 EP1] DSV41 fast load: phase=draft read 7.9 GB eagerly over 3 shards, 45 shards skipped; after release: 1 anonymous maps alive (0.00 GB), RSS 3104 MB
+[2026-09-17 22:38:04 TP2 EP1] Load weight end. elapsed=5.38 s, type=DeepseekV4ForCausalLMDSpark, quant=fp8, avail mem=36.13 GB, mem usage=1.28 GB.
+[2026-09-17 22:37:49 TP3 EP1] Load weight end. elapsed=75.43 s, type=DeepseekV4ForCausalLM, quant=fp8, avail mem=36.78 GB, mem usage=76.98 GB.
+[2026-09-17 22:38:00 TP3 EP1] DSV41 fast load: phase=target read 155.2 GB eagerly over 45 shards, 0 shards skipped; after release: 1 anonymous maps alive (0.00 GB), RSS 3653 MB
+[2026-09-17 22:38:05 TP3 EP1] DSV41 fast load: phase=draft read 7.9 GB eagerly over 3 shards, 45 shards skipped; after release: 1 anonymous maps alive (0.00 GB), RSS 3104 MB
+[2026-09-17 22:38:05 TP3 EP1] Load weight end. elapsed=5.88 s, type=DeepseekV4ForCausalLMDSpark, quant=fp8, avail mem=35.68 GB, mem usage=1.25 GB.
+health=200
+
+[00:38:43] warm-up + decode
+prose c1 per 57.03 agg 57.03
+prose c1 per 59.08 agg 59.08
+prose c4 per 31.95 agg 120.18
+code c1 per 106.6 agg 106.6
+structured c1 per 115.7 agg 115.7
+
+[00:39:20] prefill
+prefill 4113 tok/s 3637.56 ttft_ms 1130.7
+prefill 32785 tok/s 4616.48 ttft_ms 7101.73
+prefill 131091 tok/s 4487.45 ttft_ms 29212.81
+
+[00:40:00] needle 131k
+fastload needle PASS prompt_tokens 99326 wall_s 25.0 answer 'violet-otter-seventeen'
+
+[00:40:25] VERIFY-DONE

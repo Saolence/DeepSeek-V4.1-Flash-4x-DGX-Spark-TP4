@@ -5,6 +5,11 @@ raw results live under `docs/results/`.
 
 ## 2026-09-18
 
+- **Engram prefetch on a side stream (`adapter/engram_prefetch.py`, `DSV41_ENGRAM_PREFETCH=1`, on).**
+  The NVMe misses of the Engram row lookup no longer stall the graph before each gather.
+  Same-image A/B with identical prompts: step 51.7 → 49.5 ms, GPU idle 3.0 → 0.85 ms/step,
+  English essay c1 42.6 → 45.1 tok/s, sparkDash prose c1 57–59 → 60–61, prose c4 120 → 124,
+  structured 116 → 121; rows bit-identical in check mode.
 - `--sleep-on-idle` on (RustyAiLab's suggestion in Mia #16): idle head scheduler CPU 47 % → 14 %,
   workers 5 %; first response after idle and decode unchanged.
 - `docs/upstream-watch.md`: re-checked every pinned piece (SGLang dsv4.1 head, #39187/#39704,

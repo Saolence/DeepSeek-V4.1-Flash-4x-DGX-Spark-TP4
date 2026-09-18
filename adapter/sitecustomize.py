@@ -16,6 +16,10 @@ class EngramLoader(importlib.abc.Loader):
         if module.__name__ == 'sglang.srt.layers.engram':
             from engram_backend import install
             install(module)
+            # After engram_backend: Engram rows fetched on a side stream right after the
+            # hasher. Gated on DSV41_ENGRAM_PREFETCH, inactive by default.
+            from engram_prefetch import install as install_engram_prefetch
+            install_engram_prefetch(module)
         elif module.__name__ == 'sglang.srt.layers.quantization.fp8_utils':
             from mxfp8_b12x import install
             install(module)

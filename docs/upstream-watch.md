@@ -34,19 +34,20 @@ sgl-project/sglang, DeepGEMM, b12x, HuggingFace and the other public Spark recip
 
 - **`--sleep-on-idle`: adopted.** Head scheduler idle CPU 47 % → 14 %, workers 5 %; first
   response after 20 s idle 0.18–0.21 s either way; decode unchanged.
-- **Engram gap (the "prestage" lead).** Live profile of 40 decode steps at c1 (rank 0): step
-  48.5 ms, GPU busy 93.9 %, and 2.2–2.4 ms/step of the 3 ms idle sits before the two
-  `_engram_gather_kernel` launches on real Polish prose (24–64 % row-cache hits); 1.0 ms/step on
-  sparkDash's prose (96 % hits). Not the callback mechanism: a host node inside a replayed graph
-  costs ~2 µs and the pinned H2D copy 26 µs (measured). It is NVMe miss latency: an O_DIRECT
-  8 KB `pread` on the packed shard is ~200 µs median (p99 280–660 µs), each rank reads its own
-  misses one after another inside the host callback, and the all-reduce waits for the slowest
-  rank. Tried: probe the cache first and send ≥2 misses to the I/O pool — no change (2.38 vs
-  2.44 ms), because at c1 a rank owns ~1.5 of the 6 rows per lookup, so a second miss per rank
-  is rare. The only fix left is fetching rows *before* the graph runs, which needs the hash ids
-  ahead of time: a CPU replica of the Engram hasher (n-gram over the request's tokens, bit-exact
-  against the GPU one) driven from the scheduler between steps. Upside ≈ 2.4 ms/step (~5 %) at
-  c1 on real text, ~0 on sparkDash prose; not built.
+- **Engram gap (the "prestage" lead): closed, shipped as `adapter/engram_prefetch.py`.** Live
+  profile of 40 decode steps at c1: 2.2–2.4 ms of the 3 ms idle per step sat before the two
+  `_engram_gather_kernel` launches on real text (1.0 ms on sparkDash prose). Not the callback
+  mechanism (a host node in a replayed graph costs ~2 µs, the pinned H2D copy 26 µs): it is NVMe
+  miss latency, ~200 µs per O_DIRECT 8 KB `pread` on the packed shard, served inside the host
+  callback while the graph waits. Parallelising the misses in `row_store.cpp` changed nothing.
+  What worked: the hash ids for both Engram layers exist at the start of the forward, so the
+  adapter forks a side stream right after `EngramHasher.forward`, runs the ids copy, the host
+  lookup and the row copies there for every layer, and joins only at the layer's gather. Inside
+  the CUDA graph that is a fork/join branch with a host node. Same-image A/B, identical prompts:
+  step 51.69 → 49.49 ms, idle 2.97 → 0.85 ms/step, gap 2.35 → 0.13 ms, English essay c1
+  42.6/43.2/42.0 → 45.1/46.4/43.7 tok/s, sparkDash prose c1 57.1/59.0 → 60.3/60.7, prose c4
+  119.9 → 123.8, structured 116.1 → 121.3. Check mode (old path re-run after every prefetched
+  gather) counted 0 differing gathers across benches and the 131k needle.
 - **Markov W2 top-k pruning (vLLM #56694).** The bf16 vocab-sized GEMMs (LM head + Markov W2)
   are 2.8 ms/step in the same profile, so the pruning can recover at most ~1–1.5 ms/step
   (2–3 %), and it changes the draft distribution on prose, our weakest column. Not built.
@@ -66,7 +67,6 @@ sgl-project/sglang, DeepGEMM, b12x, HuggingFace and the other public Spark recip
   their own note) and are grafted onto a different SGLang commit + FlashInfer 0.6.18. On our
   budget the fusable tiny kernels are ~3.8 ms/step and the hc kernels 3.6 ms, so the ceiling
   here is a few percent for a large, version-bound port. Not planned.
-- nktlabs Engram prestage (vLLM patch): the same idea as the CPU-hasher prefetch above.
 
 ## Watch-outs from other fleets
 

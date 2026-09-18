@@ -255,6 +255,12 @@ and look for `DSV41 prefill TP split (v3) rank=0 ... end=1024` in the boot log. 
 
 What we are pinned to and what would let us move is in [docs/upstream-watch.md](docs/upstream-watch.md) (checked 2026-09-18).
 
+### Tested and not adopted (2026-09-18)
+
+- **`SGLANG_DSPARK_OPT_MARKOV_W2_TP_SHARD=0`** (Markov W2 replicated instead of TP-sharded, drops the 0.5 ms vocab all-gather): the bf16 vocab GEMM grows 3.04 → 4.31 ms/step, net step 49.7 → 50.3 ms, prose c1 unchanged. Kept sharded.
+- **Fast-load knobs `DSV41_FAST_LOAD_INFLIGHT_GB=12` + `num_threads=2`**: load_weight 79 → 69 s but start-to-ready only 115 → 113 s. Defaults kept.
+- **Parallel Engram misses in `row_store.cpp`** (probe first, pool for ≥2 misses): gather gap 2.44 → 2.38 ms, i.e. nothing; the side-stream prefetch above is what removed it.
+
 ### Tested and not adopted (2026-09-17)
 
 - **sglang#39704** (mHC/metadata overhead for medium batches) applied onto the pinned branch: every column within ±2 % of production on this fleet (its gain is at 32–64 concurrent requests on GB300). Kept out.

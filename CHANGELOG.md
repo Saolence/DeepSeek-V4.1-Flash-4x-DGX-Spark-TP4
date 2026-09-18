@@ -5,6 +5,8 @@ raw results live under `docs/results/`.
 
 ## 2026-09-18
 
+- Tested and not adopted: Markov W2 unsharded (+0.6 ms/step), fast-load knobs 12 GB / 2 threads
+  (−2 s to ready), parallel Engram misses in the row store (no change).
 - **Engram prefetch on a side stream (`adapter/engram_prefetch.py`, `DSV41_ENGRAM_PREFETCH=1`, on).**
   The NVMe misses of the Engram row lookup no longer stall the graph before each gather.
   Same-image A/B with identical prompts: step 51.7 → 49.5 ms, GPU idle 3.0 → 0.85 ms/step,

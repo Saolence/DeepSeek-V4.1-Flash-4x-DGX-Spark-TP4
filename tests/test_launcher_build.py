@@ -123,3 +123,12 @@ class RsyncExcludesTests(unittest.TestCase):
             if pattern in (".env", ".env.tp4"):
                 continue  # exact filenames, meant to be protected everywhere
             self.assertTrue(pattern.startswith("/"), f"unanchored exclude: {pattern}")
+
+
+class CanaryDockerfileTests(unittest.TestCase):
+    """Dockerfile.canary installs two wheels from PyPI; an offline site needs a mirror."""
+
+    def test_the_pip_index_is_overridable(self):
+        text = (ROOT / "Dockerfile.canary").read_text()
+        self.assertIn("ARG PIP_INDEX=https://pypi.org/simple", text)
+        self.assertIn('-i "$PIP_INDEX"', text)

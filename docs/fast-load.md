@@ -1,11 +1,9 @@
 # Fast weight loading (2026-09-18)
 
 `adapter/fast_load.py`, gate `DSV41_FAST_LOAD=1`. Engine start on the production stack went
-from 356 s to 125 s; the values that reach the model are bitwise the same. Status on
-2026-09-18: the gate ships **off**. The version that ran on the fleet (anonymous mmap buffers)
-leaves the KV pool 10-14 % smaller than the stock loader; the cause is understood and the fix
-(pinned buffers) is in the file and unit-tested, but the fleet boot that confirms it did not
-happen that night (a side test took a worker down, see the last section).
+from 343 s to 124 s; the values that reach the model are bitwise the same. The one trade-off:
+the KV pool comes out 3-6 % smaller (7.27 M vs 7.47-7.82 M tokens on the same image), see the
+last section. The gate ships on.
 
 ## Where the 285 s went
 
@@ -35,7 +33,7 @@ Profiled with `py-spy dump` every 10 s and `/proc/diskstats` every 5 s during pr
 | the above plus pacing the copies (`maybe_executor_submit` wrapped with a budget) | ranks 1/3: 108-130 s -> 62-65 s; ranks 0/2 unchanged: their faults are the slow kind whatever is in the cache |
 | eager reads into host memory (`torch.empty` + `preadv`), returned from `get_tensor` | load 66 s on every rank, but ~11 GB stayed resident afterwards (glibc keeps freed multi-MB chunks once its dynamic mmap threshold has grown) and the KV pool, sized from the head's free memory, shrank 5x |
 | eager reads into anonymous `mmap` buffers (`torch.frombuffer`), pool shut down and `malloc_trim` after each load | load 73 s, the process itself back to baseline, but the KV pool still 10-14 % smaller than a same-image control boot: SGLang sizes it from `MemAvailable` (integrated GPU), and ~1.5 GB had left `MemAvailable` without showing up in any process or kernel counter. A standalone test reproduced it: after a burst of concurrent host-to-device copies from *pageable* memory the driver keeps a staging pool (~0.4 GB per 3 GB burst); pinned sources leave nothing behind |
-| eager reads into pinned host memory (torch's caching host allocator), everything released before the engine measures memory | **current code; standalone copy test shows pinned sources leave nothing behind; the confirming fleet boot is still owed** |
+| **eager reads into pinned host memory (torch's caching host allocator), everything released before the engine measures memory** | **current code: load 71-83 s per rank, KV pool 7.27 M vs 7.75 M in the control boot of the same image (-6 %, or -3 % against the low end of the control spread)** |
 | upstream `--weight-loader-prefetch-checkpoints` + `--weight-loader-disable-mmap` | OOM-killed the head (disable-mmap stages whole 10 GB shards in RAM, nine in flight) |
 
 ## How it works
@@ -66,11 +64,11 @@ Profiled with `py-spy dump` every 10 s and `/proc/diskstats` every 5 s during pr
 
 | | before | after |
 |---|---:|---:|
-| target `load_weight`, rank 0 / 1 / 2 / 3 | 228 / 95 / 246 / 114 s | 74 / 83 / 73 / 71 s |
+| target `load_weight`, rank 0 / 1 / 2 / 3 | 225-246 / 95 / 246 / 114 s | 71-74 / 83 / 73 / 71 s |
 | draft `load_weight` | 38-50 s | 3-6 s |
 | `Engine startup timings: load_weight` | 276-278 s | 77-89 s |
-| `scheduler_e2e` (start to ready) | 346-354 s | 125-129 s |
-| `max_total_num_tokens` (same image, gate off vs on, same night) | 7.47-7.82M | 6.2-6.8M (mmap-buffer version; pinned version not yet booted) |
+| `scheduler_e2e` (start to ready) | 343-354 s | 124-129 s |
+| `max_total_num_tokens` (same image, gate off vs on, same night) | 7.47-7.82M | 7.27M pinned buffers; 6.2-6.8M mmap buffers |
 | decode prose c1 / c4 agg, code c1, structured c1 | 57.0 / 118.6 / 107 / 115 | 56.8 / 120.8 / 92-107 / 99-111 |
 | prefill 4k / 32k / 128k | 4070 / 4554 / 4364 | 2747-3227 / 4209-4232 / 4474-4494 |
 | needle 131k | PASS | PASS |
@@ -104,12 +102,15 @@ did not show anywhere is driver memory: a standalone test on a worker copying 3 
 host memory with 24 threads leaves ~0.4 GB missing from `MemAvailable` after the buffers are
 freed, a second burst adds nothing, and copies from pinned memory leave nothing. So the eager
 buffers are now pinned (torch's caching host allocator, returned with `_host_emptyCache` before
-the engine measures). The raw snapshots are in `docs/results/fastload-20260918/`
+the engine measures). That closed most of the gap: `MemAvailable` after the draft load is
+35.1 GB against 35.9 GB for the stock loader (pool 7.27 M vs 7.75 M). The last ~0.8 GB shows up
+only as `Mapped` (file pages mapped by the scheduler process, 1.5 GB vs 0.6 GB) with the CUDA
+allocator, anonymous memory, slab and page tables identical; not chased further. The raw snapshots are in `docs/results/fastload-20260918/`
 (`control-boot-observe*.txt`, `control-late.txt` for the stock loader; `fastload-verify-v*.txt`
 for the fast-load boots).
 
 The checkpoint test that validates bitwise equality held the whole draft (7.9 GB) in memory; run
 with pinned buffers on a *serving* worker it pushed the node into a state where SSH stopped
 answering and the fleet went down. It now compares tensor by tensor and holds nothing, and it
-must only be run with the fleet stopped. That is the reason the pinned-buffer fleet boot is still
-owed.
+must only be run with the fleet stopped. The pinned-buffer boot ran the next morning
+(`fastload-verify-v13-pinned.txt`, control `control-boot-observe3.txt`).

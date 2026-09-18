@@ -364,8 +364,19 @@ class PreflightTests(unittest.TestCase):
 
     def test_worker_settings_exports_the_ring_functions(self):
         out = check(nccl_shell("nccl_worker_settings"))
-        for function in ("nccl_library", "nccl_mount_args", "ring_gid_index", "nccl_preflight"):
+        for function in ("switchless_ring_enabled", "nccl_library", "nccl_mount_args",
+                         "ring_gid_index", "nccl_preflight"):
             self.assertIn(f"{function} ()", out)
+
+    def test_worker_payload_does_not_swallow_a_missing_function(self):
+        """Every call in the remote payload is guarded with `|| return 0`, so a
+        function left out of it is a silent no-op rather than an error."""
+        payload = check(nccl_shell("nccl_worker_settings",
+                                   {"NCCL_SWITCHLESS_RING_ONLY": "1"}))
+        result = subprocess.run(["bash", "-c", payload + "\ntype -t switchless_ring_enabled"],
+                                text=True, capture_output=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip().splitlines()[-1], "function")
 
 
 class SourceHygieneTests(unittest.TestCase):
@@ -402,6 +413,21 @@ class SourceHygieneTests(unittest.TestCase):
         for later in ("docker rm", "docker run -d", "start_worker"):
             if later in serve:
                 self.assertLess(gate, serve.index(later), later)
+
+    def test_worker_containers_mount_the_same_nccl_as_the_head(self):
+        """The ring skips the tree connect on every rank, so a worker that loads a
+        different NCCL than the head never completes ncclCommInitRank."""
+        source = (ROOT / "start.sh").read_text()
+        head = source[source.index("docker_common_args()"):]
+        head = head[:head.index("\n}\n")]
+        self.assertIn("nccl_mount_args _a", head)
+        serve = source[source.index("cmd_serve()"):]
+        serve = serve[:serve.index("\n}\n")]
+        workers = serve[serve.index("Starting workers"):serve.index("Starting head")]
+        self.assertIn("$(nccl_worker_settings)", workers)
+        self.assertIn("nccl_mount_args nccl_args", workers)
+        self.assertIn("${nccl_args[@]}", workers)
+        self.assertNotIn("LD_LIBRARY_PATH", workers)
 
 
 class LocalWeightsTests(unittest.TestCase):

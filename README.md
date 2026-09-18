@@ -15,24 +15,24 @@ Other work this profile builds on:
 - **local-inference-lab / Luke Alonso and Jason (original-el8)**, [b12x](https://github.com/local-inference-lab/b12x): RoCEnante, the one-shot RDMA all-reduce (`runtime/b12x`, Apache-2.0, frozen at the SG17 revision).
 - **MiaAI-Lab/sparkDash**, the benchmark used for every number below.
 
-## What runs in production (2026-09-17)
+## What runs in production (2026-09-18)
 
-One image, one env file. Everything in the tables below labelled **production** is this stack:
+One image, one env file. Everything in the tables below labelled **production** is this stack. What changed when is in [CHANGELOG.md](CHANGELOG.md):
 
 | Layer | Setting | Status | Why |
 |---|---|---|---|
 | Image | `Dockerfile.canary-roce` = upstream `dsv4.1` branch at `f80c91a4b` + RoCEnante overlay + all adapters | **on** | fastest decode of the three images (branch kernels + RDMA all-reduce) |
 | Slots | `MAX_RUNNING_REQUESTS=16` | on | adds the c16 tier; c1–c8 unchanged |
 | Experts | `EP_SIZE=2`, `--enable-deepseek-v4-fp4-indexer` | on | straggler wait halved; kernel path |
-| Engram | `DSV41_CACHE_GIB=4`, `DSV41_CACHE_WAYS=16` | on | 67–76 % row-cache hits on real text |
+| Engram | `DSV41_CACHE_GIB=4`, `DSV41_CACHE_WAYS=16`, `DSV41_ENGRAM_PREFETCH=1` | on | row cache on NVMe; the row lookups run on a side stream right after the hasher instead of stalling the graph before each gather: step 51.7 → 49.5 ms, real-text prose c1 +5 %, rows bit-identical ([docs/upstream-watch.md](docs/upstream-watch.md)) |
 | Draft | `DSPARK_BLOCK_SIZE=5`, `SGLANG_DSPARK_FOLDED_SAMPLING=2` | on | k=5 wins on code, ties on prose; forced fold keeps sampled decode equal to greedy on the branch |
 | Prefill | `CHUNKED_PREFILL_SIZE=4096` + `DSV41_INDEXER_CHUNKED=1` (v3) + `SPARK_PREFILL_TP_SPLIT=1` | on | bounded indexer transient (sglang#39187) plus the SG18 row split across ranks; 985k prompt leaves 5 GiB on the head |
 | Shared expert | `DSV41_SHARED_PAD_K=1` | on | keeps the K=576 shape on the b12x kernel, −0.9 ms/step, bit-identical |
 | Transport | `SGLANG_ROCE_ALLREDUCE=1`, `SGLANG_ROCE_MAX_SIZE=2097152`, `B12X_ROCE_HCA=rocep1s0f0,roceP2p1s0f0` | on | TP SUM all-reduces up to 2 MiB over RDMA on both rails; 2 MiB covers the 16-slot step (983 KB) |
 | NCCL | `IB_HCA=rocep1s0f0,roceP2p1s0f0` | on | neutral within noise, kept for the remaining collectives |
 | Fabric | switched RoCE, tree reachable | on | every default assumes a switch; a switchless ring sets `NCCL_SWITCHLESS_RING_ONLY=1` instead (see below) |
-| Serving | `--enable-cache-report`, `--min-free-slots-delay 1`, `DSV41_MAX_NEW_TOKENS`, loop abort, thinking alias | on | cached-token usage for clients; the rest is upstream's |
-| Weight loading | `DSV41_FAST_LOAD=1` (+ `--model-loader-extra-config {"num_threads":1}`) | **off, pending** | engine start 356 s → 125 s with bytes identical, decode/prefill/needle unchanged; the version measured on the fleet costs 10–14 % of the KV pool (driver staging memory behind pageable copies), the pinned-buffer fix is written and unit-tested but its fleet boot is still owed ([docs/fast-load.md](docs/fast-load.md)) |
+| Serving | `--enable-cache-report`, `--sleep-on-idle`, `--min-free-slots-delay 1`, `DSV41_MAX_NEW_TOKENS`, loop abort, thinking alias | on | cached-token usage for clients; sleep-on-idle takes the head scheduler from 47 % to 14 % CPU when idle with no change to first-response latency (0.2 s) or decode; the rest is upstream's |
+| Weight loading | `DSV41_FAST_LOAD=1` (+ `--model-loader-extra-config {"num_threads":1}`) | **on** | engine start 343 s → 111–124 s, bytes identical, decode/prefill/needle unchanged; costs 3–13 % of the KV pool (6.71–7.27 M vs 7.47–7.82 M tokens on the same image), the one trade-off in this table ([docs/fast-load.md](docs/fast-load.md)) |
 | Rust image processor | `SGLANG_RUST_BUILD_MODE=never` | off | the branch's `cargo` probe can hang the head before the HTTP server starts; PIL path is used |
 | Adaptive chunk sizer | `DSV41_ADAPTIVE_CHUNK` | off | superseded by the bounded indexer; it would only shrink chunks needlessly |
 | DSpark SPS table / ragged verify | `DSPARK_SPS_TABLE` | off (file absent) | crashes the Engram path on this model; verify-all schedule stays |
@@ -71,7 +71,7 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 | upstream TP4 example (from its README) | 45.4 | 72.9 | 103.1 (26.7) | 114.1 (23.2) | 134.2 (22.0) |
 | this profile, `Dockerfile` (base image) | 51.6 | 76.7 | 109.3 (28.5) | 160.9 (20.8) | 248.8 (16.7) |
 | this profile, `Dockerfile.canary` (upstream dsv4.1 branch) | 55.4 | 80.9 | 118.9 (30.7) | 178.2 (24.0) | 277.5 (18.6) |
-| **production** (`Dockerfile.canary-roce`, 2 MiB route, prefill TP split, both rails) | **57.0** | **81.7** | **118.6 (31.5)** | **185.1 (24.7)** | **290.7 (18.9)** |
+| **production** (`Dockerfile.canary-roce`, 2 MiB route, prefill TP split, both rails, fast load, Engram prefetch; 2026-09-18) | **61.0** | **85.9** | **125.2 (33.2)** | **178.9 (24.3)** | **292.9 (19.3)** |
 
 ### Code and structured decode, aggregate tok/s
 
@@ -79,7 +79,7 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 |---|---:|---:|---:|---:|
 | this profile, base image | 96.7 | 446.7 | 595.3 | 104.5 |
 | this profile, canary image | 100.4 | 513.3 | 838.6 | 108.0 |
-| **production** (see above) | **107.0** | **540.1** | **860.8** | **115.4** |
+| **production** (see above) | **113.3** | **548.3** | **882.4** | **124.1** |
 
 ### Prefill, cold, tok/s by prompt length
 
@@ -88,7 +88,7 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 | upstream example (chunk 1024) | 3350 | 3782 | 3768 | 3531 | 3251 | – |
 | this profile, base image (chunk 4096 + indexer backport) | 3532 | 4006 | 4038 | 3917 | 3230 | 2724 |
 | this profile, canary image | 3174 | 3982 | 4180 | 4010 | 3499 | 2701 |
-| **production** (canary-roce + prefill TP split) | **4070** | **4513** | **4554** | **4375** | **4364** | **3893** |
+| **production** (canary-roce + prefill TP split + fast load + Engram prefetch) | **3202** | **3497** | **4665** | **4674** | **4539** | **4241** |
 
 **Caveat on the prefill table:** sparkDash's prefill filler is one repeated token, so every filler token hits the same Engram row and the row cache (`DSV41_CACHE_GIB=4`) inflates those numbers (reported by koldfrontier in [MiaAI-Lab#21](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-DGX-Sparks/issues/21)). The same canary engine on random-word text, cold, one request per size, `prompt_tokens / TTFT`:
 
@@ -105,12 +105,12 @@ Long-context checks: needle retrieval PASS at 131k, 262k and **985k** tokens on 
 
 | | stock loader | fast load (`DSV41_FAST_LOAD=1`) |
 |---|---:|---:|
-| target `load_weight` (rank 0 / 1 / 2 / 3) | 228 / 95 / 246 / 114 s | 74 / 83 / 73 / 71 s |
-| draft `load_weight` | 38–50 s | 3–6 s |
-| engine start to ready (`scheduler_e2e`) | 346–354 s | 125–129 s |
-| `max_total_num_tokens` (KV pool, same image, same night) | 7.47–7.82 M | 6.2–6.8 M with the mmap-buffer version |
+| target `load_weight` (rank 0 / 1 / 2 / 3) | 225–246 / 95 / 246 / 114 s | 71–74 / 83 / 73 / 71 s |
+| draft `load_weight` | 38–50 s | 3–8 s |
+| engine start to ready (`scheduler_e2e`) | 343–354 s | 124–129 s |
+| `max_total_num_tokens` (KV pool, same image, same night) | 7.47–7.82 M | 7.27 M and 6.71 M on two boots (pinned buffers); 6.2–6.8 M with the earlier mmap buffers |
 
-Same image, gate on versus off, 2026-09-18. Decode, prefill and the needle test are unchanged; the KV pool is not, which is why the gate ships off: the cause and the fix (pinned buffers) are in [docs/fast-load.md](docs/fast-load.md), the confirming boot is still owed.
+Same image, gate on versus off, 2026-09-18. Decode, prefill and the needle test are unchanged. The KV pool is 3–13 % smaller (it also varies more from boot to boot): SGLang sizes it from the head's `MemAvailable` right after the loads, and ~0.8 GB less is available then with the fast loader (with pageable buffers it was 1.5 GB, traced to driver staging memory; the remainder shows only as mapped file pages of the scheduler process). Flip `DSV41_FAST_LOAD=0` if the last 0.5–1 M tokens of pool matter more than 220 s per boot. Profile, dead ends and raw snapshots: [docs/fast-load.md](docs/fast-load.md).
 
 ## Quality gate
 
@@ -154,6 +154,7 @@ scripts/fetch-sglang-canary.sh                           # stages runtime/sglang
 docker build -f Dockerfile.canary -t dsv41-4x-spark:canary .   # on the head and on every worker
 # .env.tp4:
 #   IMAGE=dsv41-4x-spark:canary
+#   BUILD_DOCKERFILE=Dockerfile.canary   # or let `./start-tp4.sh build` build it everywhere
 #   EXTRA_CONTAINER_ENV="DSV41_INDEXER_CHUNKED=1 SGLANG_DSPARK_FOLDED_SAMPLING=2"
 ./start-tp4.sh serve
 ```
@@ -161,6 +162,8 @@ docker build -f Dockerfile.canary -t dsv41-4x-spark:canary .   # on the head and
 `SGLANG_RUST_BUILD_MODE=never` is required on the branch images: the dsv4.1 tree probes a Rust toolchain to build its image preprocessor, and that `cargo --version` call can hang before the HTTP server starts (workers come up, `/health` never answers). `never` keeps the PIL image path.
 
 `SGLANG_DSPARK_FOLDED_SAMPLING=2` matters: the branch folds only the greedy draft proposal into the CUDA graph by default, and sampled requests (temperature > 0, i.e. normal chat) would take the eager path. With it forced, sampled decode runs ~5 % slower than greedy on this image (it was equal on the base image); without it, ~9 % slower.
+
+`./start-tp4.sh build` compiles `BUILD_DOCKERFILE` (default `Dockerfile`, and it has to stay inside the repository so the rsync that stages the workers sees it) and tags the result `$IMAGE`; `BUILD_ARGS` carries anything else the recipe needs, e.g. `--build-arg PIP_INDEX=https://<mirror>/simple` on a network without pypi.org.
 
 ### Optional: RoCEnante for the tensor-parallel all-reduces
 
@@ -178,6 +181,8 @@ docker build -f Dockerfile.canary-roce -t dsv41-4x-spark:canary-roce .    # on e
 `B12X_ROCE_HCA` lists the RDMA devices to stripe across (both rails of the switched fabric here; their port-1 GID at `NCCL_IB_GID_INDEX` must be populated). The boot log must show `RoCEnante ready: world=4 hcas=...` and later `ROCE_TP8_ROUTE ... bytes=491520`. Measured on this fleet (512 KiB route, same boot as the canary row): +3 % prose c1, +8 % structured c1, +3.5 % code c16 over the canary image; needle PASS at 131k and 262k; a soak of three 16-stream code/prose waves concurrent with a 262k cold prefill completed with zero transport errors. `SGLANG_ROCE_MAX_SIZE` defaults to the overlay's 512 KiB; the 16-request decode step's all-reduce is 983 KB, so 2 MiB (b12x's own default) routes it too: c16 aggregate +4.5 %, code c1 +3 %, structured +3 %, and sampled decode becomes equal to greedy. The cost is a new transport in the decode path: b12x reports one open issue where a rank wedged under long mixed-context traffic on an earlier revision ([b12x#313](https://github.com/local-inference-lab/b12x/issues/313)); the result-boundary health check in the overlay is the mitigation, and NCCL is one env change away (`SGLANG_ROCE_ALLREDUCE=0`).
 
 ### Optional: switchless ring (no RoCE switch)
+
+Launcher fixes from Saolence after the initial merge: the worker containers now mount the same NCCL as the head through `nccl_mount_args` and the worker preflight actually runs (#5, live-tested here on the switched fleet, 114 s to ready); `./start-tp4.sh build` stages the workers with anchored rsync excludes, compiles `BUILD_DOCKERFILE` and passes `BUILD_ARGS` (#6, the unanchored `models` exclude was dropping `sglang/srt/models` from the workers); the second plane's addressing is documented in [docs/switchless-ring.md](docs/switchless-ring.md) (#2). Note for the non-ring path: torch resolves `libnccl.so.2` through its own RPATH, so only `NCCL_OVERLAY_PIP=1` replaces the library torch uses; the `LD_LIBRARY_PATH` mount reaches `ctypes` users only.
 
 Every default above assumes a switched fabric. If the four Sparks are cabled as a **ring**
 (a-b-c-d-a, one DAC per adjacency, no switch) the stack does not boot on those defaults:
@@ -246,6 +251,16 @@ EXTRA_CONTAINER_ENV="... SPARK_PREFILL_TP_SPLIT=1 SPARK_PREFILL_TP_MIN_CONTEXT=3
 
 and look for `DSV41 prefill TP split (v3) rank=0 ... end=1024` in the boot log. Decode is unaffected (the draft runner keeps the stock path). The helper refuses thresholds below 32768 tokens / 1024 rows at boot (`ValueError`), and a sweep with that floor relaxed to 16k gained nothing outside the ±5–10 % run-to-run spread of short prefills, so 32768 stays. `runtime/flash_mla_sm120.canary.py` also carries SG18's scratch zero-initialisation (masked candidates gather slot 0; keeping the scratch finite avoids a NaN through a zero probability).
 
+### Upstream watch
+
+What we are pinned to and what would let us move is in [docs/upstream-watch.md](docs/upstream-watch.md) (checked 2026-09-18).
+
+### Tested and not adopted (2026-09-18)
+
+- **`SGLANG_DSPARK_OPT_MARKOV_W2_TP_SHARD=0`** (Markov W2 replicated instead of TP-sharded, drops the 0.5 ms vocab all-gather): the bf16 vocab GEMM grows 3.04 → 4.31 ms/step, net step 49.7 → 50.3 ms, prose c1 unchanged. Kept sharded.
+- **Fast-load knobs `DSV41_FAST_LOAD_INFLIGHT_GB=12` + `num_threads=2`**: load_weight 79 → 69 s but start-to-ready only 115 → 113 s. Defaults kept.
+- **Parallel Engram misses in `row_store.cpp`** (probe first, pool for ≥2 misses): gather gap 2.44 → 2.38 ms, i.e. nothing; the side-stream prefetch above is what removed it.
+
 ### Tested and not adopted (2026-09-17)
 
 - **sglang#39704** (mHC/metadata overhead for medium batches) applied onto the pinned branch: every column within ±2 % of production on this fleet (its gain is at 32–64 concurrent requests on GB300). Kept out.
@@ -262,6 +277,7 @@ All adapters are import hooks in `adapter/sitecustomize.py`, gated by an environ
 | `adapter/indexer_chunked.py` | `DSV41_INDEXER_CHUNKED` | sglang#39187 adapted to the `dev-dsv41` image backend (`self.candidate_masks`) |
 | `adapter/indexer_chunked_v2.py` | `DSV41_INDEXER_CHUNKED` | sglang#39187 verbatim, for the `candidate_metadata` backend of the `dsv4.1` branch (kept for reference) |
 | `adapter/indexer_chunked_v3.py` + `spark_prefill_dense.py` | `DSV41_INDEXER_CHUNKED`, `SPARK_PREFILL_TP_SPLIT` | v2 plus the SG18 prefill TP split inside the chunked path; `sitecustomize` picks v1 or v3 from the stock source |
+| `adapter/engram_prefetch.py` | `DSV41_ENGRAM_PREFETCH` | Forks a side stream after `EngramHasher.forward`, runs the ids copy, the row-store host callback and the row copies for every Engram layer there, and joins at the layer's gather; `DSV41_ENGRAM_PREFETCH_CHECK=1` re-runs the synchronous path and counts differing gathers (0 over benches and needles) |
 | `adapter/fast_load.py` | `DSV41_FAST_LOAD` | Checkpoint tensors this rank will copy (owned experts, no Engram tables) read eagerly by a 16-thread `pread` pool into pinned host memory and returned from `safe_open`; the model's async copies paced to a byte budget so the reads stay just ahead; the DSpark draft load opens only the `mtp.*` shards. Loader-only: the model still does every narrow and copy |
 
 Tests: `tests/test_indexer_chunked.py` and `tests/test_indexer_chunked_v2.py` lift the stock function out of the engine's source, drive it and the backport with deterministic fake kernels, and require bitwise-equal `page_indices`, `raw_indices` and candidate masks over six scenarios (ragged batches, empty requests, full and tail-only mask publishing, mask consumption, one row per chunk up to a single chunk). Both run inside the image build (`Dockerfile` runs v1, `Dockerfile.canary` runs v2), together with upstream's thinking-alias, output-cap and loop-abort tests. `tests/test_fast_load_pacing.py` (all images) checks the copy pacing; the in-image checkpoint test for the eager reads (bitwise equality against the stock `safe_open` for every dtype, draft shard filtering, memory release) needs the weights mounted and is described in `docs/fast-load.md`.
@@ -272,6 +288,7 @@ Tests: `tests/test_indexer_chunked.py` and `tests/test_indexer_chunked_v2.py` li
 - Any `#running-req` in the engine log above the concurrency being benched means foreign traffic landed in the window; the tables above were taken with none.
 - Greedy text equality is not a usable correctness gate on this stack: identical cold prompts of ~70k tokens produce different greedy continuations run to run. Correctness of the indexer backport rests on the bitwise CPU tests, upstream's in-forward `page_indices` comparison, the needle tests and the benches.
 - `scripts/window-20260916.sh` is the runbook that produced the tables (preflight, build, two boots, benches, rollback).
+- The production rows were re-measured on 2026-09-18 on the Engram-prefetch boot (`docs/results/fastload-20260918/prodbench-prefetch-20260918.txt`): two warm-up prose c1 runs discarded, then one run per cell; prose c1 is the median of three runs (61.0, 61.2, 61.0); the 4k and 16k prefill cells are single cold points that swing 2.4–3.8k between boots.
 
 ## Rollback
 
@@ -282,6 +299,10 @@ Upstream's profile is one env change away: `MAX_RUNNING_REQUESTS=8`, `CHUNKED_PR
 - The canary image's 4k-token prefill is ~6 % slower than the base image; everything from 16k up is faster.
 - Sampled decode on the canary image is ~5 % behind greedy (see above).
 - Single-stream prose speed is bounded by DSpark acceptance (~2–3 accepted tokens per step on prose against ~6 on code); no configuration changes that.
+
+## Open items
+
+- **KV pool with the fast loader.** With `DSV41_FAST_LOAD=1` the pool comes out 3–13 % smaller than with the stock loader and varies more between boots (6.71–7.27 M vs 7.47–7.82 M tokens on the same image). Pinned buffers removed most of the gap; the last ~0.8 GB of `MemAvailable` shows up only as `Mapped` file pages of the scheduler process, with the CUDA allocator, anonymous memory, slab and page tables identical. Not chased further; the snapshots to start from are in `docs/results/fastload-20260918/` (`control-boot-observe*.txt`, `fastload-verify-v13-pinned.txt`). `DSV41_FAST_LOAD=0` restores the full pool at the cost of ~220 s per boot.
 
 ## License
 

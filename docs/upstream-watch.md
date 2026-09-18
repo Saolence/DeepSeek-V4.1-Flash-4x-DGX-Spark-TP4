@@ -51,15 +51,21 @@ sgl-project/sglang, DeepGEMM, b12x, HuggingFace and the other public Spark recip
   are 2.8 ms/step in the same profile, so the pruning can recover at most ~1–1.5 ms/step
   (2–3 %), and it changes the draft distribution on prose, our weakest column. Not built.
 - **vLLM #57432** (padded keys in the DSpark softmax): not applicable, see above.
-- Real-text reference for the prose column: the Kraków essay prompt decodes at 36–40 tok/s at
-  c1 (700 tokens, warm row cache) against 57 tok/s on sparkDash's prose filler. Acceptance,
-  not Engram, is the difference.
+- Real-text reference for the prose column: a 700-token English essay ("history of Krakow",
+  temperature 0, warm row cache, engine otherwise idle) decodes at 44–46 tok/s at c1, against
+  57 tok/s on sparkDash's prose filler; the same essay in Polish 36–40 tok/s. Acceptance, not
+  Engram, is the difference. Any run with another request in flight (`running-req: 2` in the
+  log) reads 20–40 % lower, so check the log before quoting a number.
 
 ## Leads not yet tried here
 
 - LuZ-0.1.7 (luxingcom, 4x Spark TP4 ring): fused ratio-1 decode (RMSNorm + RoPE + FP4 quant +
-  FlashMLA write), fused ratio-2 pair pooling, FP4 storage for ratio-1 latents. Their absolute
-  numbers are below ours (prose c1 47 vs 57, code 84 vs 107) but the kernels are new.
+  FlashMLA write), fused ratio-2 pair pooling, FP4 storage for ratio-1 latents. Their own
+  OFF/ON table moves code 100.3 → 99.8, aggregate c1–c12 by +1 %, prose 33.3 → 36.6 tok/s
+  (from a base below our real-text 44–46); the kernels are not bit-exact (fp32-ulp deltas by
+  their own note) and are grafted onto a different SGLang commit + FlashInfer 0.6.18. On our
+  budget the fusable tiny kernels are ~3.8 ms/step and the hc kernels 3.6 ms, so the ceiling
+  here is a few percent for a large, version-bound port. Not planned.
 - nktlabs Engram prestage (vLLM patch): the same idea as the CPU-hasher prefetch above.
 
 ## Watch-outs from other fleets

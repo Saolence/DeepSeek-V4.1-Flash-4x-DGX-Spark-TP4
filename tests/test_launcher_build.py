@@ -5,6 +5,7 @@ No Docker, SSH or network: the only thing driven here is the exclude list of the
 rsync that stages the tree on the workers, because that one runs with `--delete`
 against a copy of the repository and a wrong pattern removes files from it.
 """
+import os
 import re
 import shutil
 import subprocess
@@ -27,6 +28,31 @@ def rsync_excludes():
     return re.findall(r"--exclude '([^']+)'", build_source())
 
 
+def launcher_source():
+    """start.sh from the variable defaults through the helper functions, no dispatch."""
+    source = (ROOT / "start.sh").read_text()
+    start = source.index("HEAD_IP=")
+    end = source.index('case "$CMD" in')
+    return "set -euo pipefail\n" + source[start:end]
+
+
+def shell(code, directory, settings=None):
+    env = {"PATH": os.environ["PATH"], "HOME": os.environ["HOME"], "ROOT": str(ROOT)}
+    for name in ("MODEL_DIR", "COMMON_MODEL", "SSH_IDENTITY", "NCCL_HOST_DIR",
+                 "STATE_DIR", "LOG_DIR", "WORKER_DIR", "WORKER_ENGRAM_DIR", "ENGRAM_DIR"):
+        env[name] = str(directory / name)
+    env.update(settings or {})
+    result = subprocess.run(["bash", "-c", launcher_source() + "\n" + code],
+                            env=env, cwd=ROOT, text=True, capture_output=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    return result.stdout
+
+
+def check(result):
+    assert result.returncode == 0, result.stdout + result.stderr
+    return result.stdout
+
+
 def rsync(source, destination):
     args = ["rsync", "-aH", "--delete"]
     for pattern in rsync_excludes():
@@ -35,6 +61,38 @@ def rsync(source, destination):
     result = subprocess.run(args, text=True, capture_output=True, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
     return result
+
+
+class BuildTargetTests(unittest.TestCase):
+    """`IMAGE` is whatever the profile names, so `build` must compile that recipe."""
+
+    def test_build_compiles_the_configured_dockerfile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "SSH_IDENTITY.pub").write_text("ssh-ed25519 AAAA test\n")
+            log = Path(tmp, "docker.log")
+            shell(r"""
+              BUILD_DOCKERFILE=Dockerfile.canary
+              BUILD_ARGS="--build-arg PIP_INDEX=https://mirror.invalid/simple"
+              WORKER_HOSTS=()
+              docker() { printf '%s\n' "$*" >> "$LOG"
+                         case "$1 $2" in "image inspect") echo arm64;; esac; }
+              cmd_build
+            """, Path(tmp), {"LOG": str(log)})
+            calls = [line for line in log.read_text().splitlines() if line.startswith("build ")]
+            self.assertEqual(len(calls), 1, log.read_text())
+            self.assertIn(f"-f {ROOT}/Dockerfile.canary", calls[0])
+            self.assertIn("--build-arg PIP_INDEX=https://mirror.invalid/simple", calls[0])
+
+    def test_worker_builds_the_same_dockerfile(self):
+        build = build_source()
+        self.assertIn('docker build -f "$ROOT/$dockerfile" -t "$IMAGE"', build)
+        workers = build[build.index("for h in \"${WORKER_HOSTS[@]}\""):]
+        self.assertIn('docker build -f $(printf \'%q\' "$dockerfile")', workers)
+
+    def test_a_dockerfile_outside_the_repository_is_rejected(self):
+        """The workers only see what the rsync staged, so an absolute path cannot work."""
+        build = build_source()
+        self.assertIn("BUILD_DOCKERFILE must be inside the repository", build)
 
 
 @unittest.skipUnless(HAVE_RSYNC, "rsync is not installed")

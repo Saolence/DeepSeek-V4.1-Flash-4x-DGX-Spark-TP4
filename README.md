@@ -142,6 +142,7 @@ scripts/fetch-sglang-canary.sh                           # stages runtime/sglang
 docker build -f Dockerfile.canary -t dsv41-4x-spark:canary .   # on the head and on every worker
 # .env.tp4:
 #   IMAGE=dsv41-4x-spark:canary
+#   BUILD_DOCKERFILE=Dockerfile.canary   # or let `./start-tp4.sh build` build it everywhere
 #   EXTRA_CONTAINER_ENV="DSV41_INDEXER_CHUNKED=1 SGLANG_DSPARK_FOLDED_SAMPLING=2"
 ./start-tp4.sh serve
 ```
@@ -149,6 +150,8 @@ docker build -f Dockerfile.canary -t dsv41-4x-spark:canary .   # on the head and
 `SGLANG_RUST_BUILD_MODE=never` is required on the branch images: the dsv4.1 tree probes a Rust toolchain to build its image preprocessor, and that `cargo --version` call can hang before the HTTP server starts (workers come up, `/health` never answers). `never` keeps the PIL image path.
 
 `SGLANG_DSPARK_FOLDED_SAMPLING=2` matters: the branch folds only the greedy draft proposal into the CUDA graph by default, and sampled requests (temperature > 0, i.e. normal chat) would take the eager path. With it forced, sampled decode runs ~5 % slower than greedy on this image (it was equal on the base image); without it, ~9 % slower.
+
+`./start-tp4.sh build` compiles `BUILD_DOCKERFILE` (default `Dockerfile`, and it has to stay inside the repository so the rsync that stages the workers sees it) and tags the result `$IMAGE`; `BUILD_ARGS` carries anything else the recipe needs, e.g. `--build-arg PIP_INDEX=https://<mirror>/simple` on a network without pypi.org.
 
 ### Optional: RoCEnante for the tensor-parallel all-reduces
 

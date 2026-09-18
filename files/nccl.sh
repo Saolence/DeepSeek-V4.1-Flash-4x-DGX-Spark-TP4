@@ -237,6 +237,10 @@ nccl_worker_settings() {
   for key in NCCL_OVERLAY_PIP NCCL_PIP_SO NCCL_CONTAINER_DIR NCCL_SWITCHLESS_RING_ONLY IB_HCA IMAGE NCCL_IB_GID_INDEX; do
     printf '%s=%q\n' "$key" "${!key:-}"
   done
-  declare -f nccl_library nccl_mount_args ring_gid_index nccl_preflight \
-    dual_pci_domain_args dual_pci_domain_env_string nccl_gid_publication_check
+  # switchless_ring_enabled is the first thing nccl_preflight and
+  # nccl_gid_publication_check call; leaving it out makes the remote payload
+  # exit 0 without running any check (command not found swallowed by `|| return 0`).
+  declare -f switchless_ring_enabled nccl_library nccl_mount_args ring_gid_index \
+    nccl_preflight dual_pci_domain_args dual_pci_domain_env_string \
+    nccl_gid_publication_check
 }

@@ -284,6 +284,10 @@ Upstream's profile is one env change away: `MAX_RUNNING_REQUESTS=8`, `CHUNKED_PR
 - Sampled decode on the canary image is ~5 % behind greedy (see above).
 - Single-stream prose speed is bounded by DSpark acceptance (~2–3 accepted tokens per step on prose against ~6 on code); no configuration changes that.
 
+## Open items
+
+- **KV pool with the fast loader.** With `DSV41_FAST_LOAD=1` the pool comes out 3–13 % smaller than with the stock loader and varies more between boots (6.71–7.27 M vs 7.47–7.82 M tokens on the same image). Pinned buffers removed most of the gap; the last ~0.8 GB of `MemAvailable` shows up only as `Mapped` file pages of the scheduler process, with the CUDA allocator, anonymous memory, slab and page tables identical. Not chased further; the snapshots to start from are in `docs/results/fastload-20260918/` (`control-boot-observe*.txt`, `fastload-verify-v13-pinned.txt`). `DSV41_FAST_LOAD=0` restores the full pool at the cost of ~220 s per boot.
+
 ## License
 
 Same as upstream: see [`LICENSE`](LICENSE). Model weights are MIT (DeepSeek).

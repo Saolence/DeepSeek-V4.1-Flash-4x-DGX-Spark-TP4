@@ -747,12 +747,9 @@ cmd_serve() {
       docker volume inspect $NFS_VOLUME >/dev/null || { echo 'MISSING docker volume $NFS_VOLUME on $h — run ./start.sh share'; exit 1; }
       test -d /dev/infiniband || { echo 'MISSING /dev/infiniband on $h'; exit 1; }
       mkdir -p $WORKER_DIR/state $WORKER_DIR/logs
-      NCCL_VOL=''
-      NCCL_ENV=''
-      if [ -f \$HOME/nccl-2.30.7/libnccl.so.2.30.7 ]; then
-        NCCL_VOL=\"-v \$HOME/nccl-2.30.7:$NCCL_CONTAINER_DIR:ro\"
-        NCCL_ENV='-e LD_LIBRARY_PATH=$NCCL_CONTAINER_DIR'
-      fi
+$(nccl_worker_settings)
+      nccl_args=()
+      nccl_mount_args nccl_args
       docker run -d --name $WORKER_CTN \
         --network host --ipc host --privileged --cap-add IPC_LOCK --gpus all \
         --shm-size ${SHM_SIZE:-32g} \
@@ -761,7 +758,7 @@ cmd_serve() {
         -v $NFS_VOLUME:/models/DeepSeek-V4.1-Flash:ro \
         -v $WORKER_DIR/state:/state \
         -v \$HOME/.cache:/root/.cache \
-        \$NCCL_VOL \$NCCL_ENV \\
+        \"\${nccl_args[@]}\" \\
 $(worker_env_lines "$wip" "$wgid" "$rank")
         -e API_KEY=$(printf '%q' "$API_KEY") \\
         -e EXTRA_SGLANG_ARGS=$(printf '%q' "${EXTRA_SGLANG_ARGS:-}") \\

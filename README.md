@@ -15,9 +15,9 @@ Other work this profile builds on:
 - **local-inference-lab / Luke Alonso and Jason (original-el8)**, [b12x](https://github.com/local-inference-lab/b12x): RoCEnante, the one-shot RDMA all-reduce (`runtime/b12x`, Apache-2.0, frozen at the SG17 revision).
 - **MiaAI-Lab/sparkDash**, the benchmark used for every number below.
 
-## What runs in production (2026-09-17)
+## What runs in production (2026-09-18)
 
-One image, one env file. Everything in the tables below labelled **production** is this stack:
+One image, one env file. Everything in the tables below labelled **production** is this stack. What changed when is in [CHANGELOG.md](CHANGELOG.md):
 
 | Layer | Setting | Status | Why |
 |---|---|---|---|

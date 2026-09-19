@@ -98,6 +98,19 @@ sgl-project/sglang, DeepGEMM, b12x, HuggingFace and the other public Spark recip
   Re-run `diagnostics/dsv41-backlog-20260919/prefill_probe.py` after a multi-day uptime and compare
   before trusting any tuning on a long-running fleet.
 
+### Also settled on 2026-09-19 (full session in [session-20260919.md](session-20260919.md))
+
+- Draft block size: 3 gives prose 33.8 / code 80.4 tok/s, 5 gives 44.6 / 102.7, 7 gives 28.9 / 106.8.
+  Block 5 stays; perfect per-request adaptation (the lever that pays on GLM/vLLM) would buy +4 % on
+  code and nothing on prose, so it is not worth the engine work here.
+- Chunked prefill 1024: prefill -34 to -38 %, and the decoders behind a long prefill got *worse*
+  (5.7 vs 7.8 tok/s). Chunk 4096 stays.
+- The clock cap is nearly free: 2200 MHz vs uncapped costs 1.5 % prose, 0.7 % code, 1.5-5.0 % prefill.
+- Prefix cache and Engram row cache are both healthy (35k prompt repeat 8.36 s -> 0.33 s, 99.4 %
+  cached; Engram 99.8 % hit). Decode is flat to 247k resident context.
+- Draft acceptance is 2.30 tokens/step on prose against 5.31 on code and does not move with
+  concurrency, which is the same drafter gap the Markov work targets.
+
 ## Leads not yet tried here
 
 - LuZ-0.1.7 (luxingcom, 4x Spark TP4 ring): fused ratio-1 decode (RMSNorm + RoPE + FP4 quant +

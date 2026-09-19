@@ -68,8 +68,22 @@ sgl-project/sglang, DeepGEMM, b12x, HuggingFace and the other public Spark recip
   budget the fusable tiny kernels are ~3.8 ms/step and the hc kernels 3.6 ms, so the ceiling
   here is a few percent for a large, version-bound port. Not planned.
 
+- tonyd2wild, [DeepSeek-V4.1-Flash-vLLM-DGX-Spark](https://github.com/tonyd2wild/DeepSeek-V4.1-Flash-vLLM-DGX-Spark)
+  speed run 2 (2026-09-19, vLLM, EXL3 3.5 bpw, TP4): the Engram all-gather moved onto the RoCE path
+  together with the all-reduce. That is the one collective family this profile still runs through
+  NCCL after RoCEnante; his aggregate table does not isolate it. Port candidate for the b12x route
+  (`runtime/b12x`, `SGLANG_ROCE_ALLREDUCE`): measure the all-gather share of the step first with the
+  live profiler, expect a few percent at c=1. Credit tonyd2wild if it lands.
+
 ## Watch-outs from other fleets
 
+- tonyd2wild speed run 2: two of his four nodes sat on a latched low GPU clock after a long run
+  (code 32.9 → 57.1 tok/s only after a 30–60 s power cut). Our 10-minute timer re-applies the
+  2200 MHz cap but does not detect a latch; after any multi-day uptime read
+  `nvidia-smi -q -d CLOCK` on all four before trusting a benchmark.
+- tonyd2wild speed run 2: a lane that had served 15 h ran ~30 % slower on prefill than the same
+  config fresh (cause open, a restart recovers it). Not measured here; before tuning anything on a
+  long-running fleet, run the prefill sweep and compare with the fresh-boot rows in the README.
 - Mia #23: host buddy-allocator fragmentation after the weight load on GB10 (`NV_ERR_NO_MEMORY`
   with free memory, SSH dead, ICMP alive, power cycle). Reproduced on a 4x TP4/EP2 SGLang fleet at
   512k context; same signature as our 2026-09-18 Spark_02 wedge.

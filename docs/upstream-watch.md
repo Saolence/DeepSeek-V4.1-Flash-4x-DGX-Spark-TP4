@@ -58,6 +58,46 @@ sgl-project/sglang, DeepGEMM, b12x, HuggingFace and the other public Spark recip
   Engram, is the difference. Any run with another request in flight (`running-req: 2` in the
   log) reads 20–40 % lower, so check the log before quoting a number.
 
+## Measured here on 2026-09-19 (fresh boot, four ranks, production image)
+
+- **RoCE all-gather: closed.** Live-profiler trace of 42 decode steps (step wall 51.8 ms mean):
+  NCCL is 0.6 ms/step in total, split `all_gather` 0.288 ms (265 calls), `all_reduce` 0.278 ms
+  (83 calls), `broadcast` 0.027 ms. So the whole all-gather family is 0.56 % of a step, and a RoCE
+  port of it (the all-reduce port bought 2.8x on the collective) has a ceiling of ~0.35 %. Not worth
+  the port; tonyd2wild's aggregate gain must come from the other items in his speed run.
+- **Markov head rank, priced.** `markov_w2` is read once per block position (5 per step).
+  Measured on one GB10 with the real TP4 shard (`vocab/4 = 32320` rows, bf16), median of 200 calls:
+
+  | rank | w2 per rank | effective | ms/step | vs rank 256 | share of a 51.8 ms step |
+  |---:|---:|---:|---:|---:|---:|
+  | 256 (today) | 15.8 MiB | 712 GB/s | 0.108 | – | 0.21 % |
+  | 320 | 19.7 MiB | 737 GB/s | 0.131 | +0.023 | +0.04 % |
+  | 384 | 23.7 MiB | 551 GB/s | 0.210 | +0.102 | +0.20 % |
+  | 448 | 27.6 MiB | 262 GB/s | 0.515 | +0.407 | +0.79 % |
+  | 512 | 31.6 MiB | 240 GB/s | 0.641 | +0.533 | +1.03 % |
+  | 1024 | 63.1 MiB | 236 GB/s | 1.306 | +1.198 | +2.31 % |
+  | 2048 | 126.2 MiB | 220 GB/s | 2.797 | +2.689 | +5.19 % |
+
+  The head is free only while it fits the 25.2 MB L2: up to rank 320 the read runs at 712–737 GB/s,
+  at 448 it has fallen to DRAM speed. So a retrained drafter should take **rank 320–384 first**
+  (1.25–1.5x capacity for 0.04–0.2 % of a step); rank 1024 must buy back 2.3 % in accepted length
+  before it pays for itself.
+- **Clock cap is not in force.** Under load all four nodes sit at 2509–2554 MHz (util 96 %, 57–59 °C),
+  idle at 2411 MHz, with `clocks.applications.graphics` 2418 MHz — not the 2200 MHz the cap script
+  applies. `spark-clock-cap.timer` is active but `systemctl list-timers` shows LAST 04:40 and no NEXT,
+  and the cap log's last line is 2026-09-14. Nothing is latched low (tonyd2wild's failure mode), so the
+  fleet is running fast; the comparability the cap was meant to give is what is missing. All recent
+  A/B pairs were taken in this same uncapped state, so they remain internally valid.
+- **Fresh-boot prefill baseline** for the long-uptime check (unique prefixes, thinking off, c=1):
+
+  | prompt tokens | 7,018 | 30,020 | 57,019 | 119,019 | 231,018 |
+  |---|---:|---:|---:|---:|---:|
+  | TTFT s | 2.08 | 7.77 | 13.01 | 29.11 | 59.10 |
+  | prefill tok/s | 3,371 | 3,862 | 4,383 | 4,089 | 3,909 |
+
+  Re-run `diagnostics/dsv41-backlog-20260919/prefill_probe.py` after a multi-day uptime and compare
+  before trusting any tuning on a long-running fleet.
+
 ## Leads not yet tried here
 
 - LuZ-0.1.7 (luxingcom, 4x Spark TP4 ring): fused ratio-1 decode (RMSNorm + RoPE + FP4 quant +
@@ -68,12 +108,6 @@ sgl-project/sglang, DeepGEMM, b12x, HuggingFace and the other public Spark recip
   budget the fusable tiny kernels are ~3.8 ms/step and the hc kernels 3.6 ms, so the ceiling
   here is a few percent for a large, version-bound port. Not planned.
 
-- tonyd2wild, [DeepSeek-V4.1-Flash-vLLM-DGX-Spark](https://github.com/tonyd2wild/DeepSeek-V4.1-Flash-vLLM-DGX-Spark)
-  speed run 2 (2026-09-19, vLLM, EXL3 3.5 bpw, TP4): the Engram all-gather moved onto the RoCE path
-  together with the all-reduce. That is the one collective family this profile still runs through
-  NCCL after RoCEnante; his aggregate table does not isolate it. Port candidate for the b12x route
-  (`runtime/b12x`, `SGLANG_ROCE_ALLREDUCE`): measure the all-gather share of the step first with the
-  live profiler, expect a few percent at c=1. Credit tonyd2wild if it lands.
 
 ## Watch-outs from other fleets
 

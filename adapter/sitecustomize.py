@@ -65,6 +65,13 @@ class EngramLoader(importlib.abc.Loader):
         elif module.__name__ == 'sglang.srt.models.deepseek_v4_dspark':
             from fast_load import install_dspark
             install_dspark(module)
+        elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_verify':
+            # Tap for offline draft training data. Gate checked BEFORE the import, so a disabled
+            # flag imports nothing. Wraps TargetVerifyExecutor.commit_hidden; capture is switched
+            # at runtime by the presence of DSV41_DRAFT_CAPTURE_TRIGGER, no restart needed.
+            if os.environ.get('DSV41_DRAFT_CAPTURE', '0').strip() not in ('0', 'off', 'false', ''):
+                from draft_capture import install as install_draft_capture
+                install_draft_capture(module)
         elif module.__name__ == 'sglang.srt.managers.schedule_batch':
             from loop_abort import install as install_loop_abort
             install_loop_abort(module)

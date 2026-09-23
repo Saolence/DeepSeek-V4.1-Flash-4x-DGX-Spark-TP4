@@ -76,7 +76,8 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 | upstream TP4 example (from its README) | 45.4 | 72.9 | 103.1 (26.7) | 114.1 (23.2) | 134.2 (22.0) |
 | this profile, `Dockerfile` (base image) | 51.6 | 76.7 | 109.3 (28.5) | 160.9 (20.8) | 248.8 (16.7) |
 | this profile, `Dockerfile.canary` (upstream dsv4.1 branch) | 55.4 | 80.9 | 118.9 (30.7) | 178.2 (24.0) | 277.5 (18.6) |
-| **production** (`Dockerfile.canary-roce`, 2 MiB route, prefill TP split, both rails, fast load, Engram prefetch; 2026-09-18) | **61.0** | **85.9** | **125.2 (33.2)** | **178.9 (24.3)** | **292.9 (19.3)** |
+| production on 2026-09-18 (`Dockerfile.canary-roce`, 2 MiB route, prefill TP split, both rails, fast load, Engram prefetch) | 61.0 | 85.9 | 125.2 (33.2) | 178.9 (24.3) | 292.9 (19.3) |
+| **production** (the 2026-09-18 stack + `wo_a` fp8 twin, fp8 draft LM head, draft temperature, block verification, folded fence; 2026-09-23) | **66.0** | **86.2** | **125.4 (32.9)** | **190.6 (25.5)** | **307.8 (20.4)** |
 
 ### Code and structured decode, aggregate tok/s
 
@@ -84,7 +85,8 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 |---|---:|---:|---:|---:|
 | this profile, base image | 96.7 | 446.7 | 595.3 | 104.5 |
 | this profile, canary image | 100.4 | 513.3 | 838.6 | 108.0 |
-| **production** (see above) | **113.3** | **548.3** | **882.4** | **124.1** |
+| production on 2026-09-18 | 113.3 | 548.3 | 882.4 | 124.1 |
+| **production** (2026-09-23) | **118.3** | **543.8** | **879.7** | **128.8** |
 
 ### Prefill, cold, tok/s by prompt length
 
@@ -93,7 +95,8 @@ sparkDash decode bench, 256 new tokens, temperature 0, thinking off, idle fleet,
 | upstream example (chunk 1024) | 3350 | 3782 | 3768 | 3531 | 3251 | – |
 | this profile, base image (chunk 4096 + indexer backport) | 3532 | 4006 | 4038 | 3917 | 3230 | 2724 |
 | this profile, canary image | 3174 | 3982 | 4180 | 4010 | 3499 | 2701 |
-| **production** (canary-roce + prefill TP split + fast load + Engram prefetch) | **3202** | **3497** | **4665** | **4674** | **4539** | **4241** |
+| production on 2026-09-18 (canary-roce + prefill TP split + fast load + Engram prefetch) | 3202 | 3497 | 4665 | 4674 | 4539 | 4241 |
+| **production** (2026-09-23) | **3619** | **4516** | **4501** | **4500** | **4465** | **4169** |
 
 **Caveat on the prefill table:** sparkDash's prefill filler is one repeated token, so every filler token hits the same Engram row and the row cache (`DSV41_CACHE_GIB=4`) inflates those numbers (reported by koldfrontier in [MiaAI-Lab#21](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-DGX-Sparks/issues/21)). The same canary engine on random-word text, cold, one request per size, `prompt_tokens / TTFT`:
 
@@ -315,7 +318,8 @@ Tests: `tests/test_indexer_chunked.py` and `tests/test_indexer_chunked_v2.py` li
 - Any `#running-req` in the engine log above the concurrency being benched means foreign traffic landed in the window; the tables above were taken with none.
 - Greedy text equality is not a usable correctness gate on this stack: identical cold prompts of ~70k tokens produce different greedy continuations run to run. Correctness of the indexer backport rests on the bitwise CPU tests, upstream's in-forward `page_indices` comparison, the needle tests and the benches.
 - `scripts/window-20260916.sh` is the runbook that produced the tables (preflight, build, two boots, benches, rollback).
-- The production rows were re-measured on 2026-09-18 on the Engram-prefetch boot (`docs/results/fastload-20260918/prodbench-prefetch-20260918.txt`): two warm-up prose c1 runs discarded, then one run per cell; prose c1 is the median of three runs (61.0, 61.2, 61.0); the 4k and 16k prefill cells are single cold points that swing 2.4–3.8k between boots.
+- The 2026-09-23 production rows come from one boot right after a power cycle (`prodbench` as below; prose c1 is the median of 65.24 / 65.97 / 66.23). The draft temperature and block verification act only on sampled requests, so they are not visible in these greedy benches; the prose c1 gain is the `wo_a` and draft-head kernels.
+- The 2026-09-18 production rows were re-measured on 2026-09-18 on the Engram-prefetch boot (`docs/results/fastload-20260918/prodbench-prefetch-20260918.txt`): two warm-up prose c1 runs discarded, then one run per cell; prose c1 is the median of three runs (61.0, 61.2, 61.0); the 4k and 16k prefill cells are single cold points that swing 2.4–3.8k between boots.
 
 ## Rollback
 

@@ -15,6 +15,18 @@ raw results live under `docs/results/`.
 - **`adapter/draft_tau.py`, `DSV41_DRAFT_TAU=0.8`, on.** Draft proposal temperature for sampled
   requests; exact by construction. +1.2 % accepted tokens per step at T=1 / top_p=0.95 offline
   (3.242 → 3.280 on held-out traffic); 0.7–0.8 is the optimum.
+- **`adapter/draft_head_fp8.py`, `DSV41_DRAFT_HEAD_FP8=1`, on.** The draft's block logits come from an
+  fp8 copy of the shared LM head (target head untouched): 1405 → 721 us, live step 51.7 → 50.9 ms.
+- **`adapter/block_verify.py`, `DSV41_BLOCK_VERIFY=1`, on.** Block verification (Sun et al., ICLR 2025)
+  for sampled rows. Lossless (chi-square test on a toy LM in the image build). Offline on
+  engine-exact p and q: +1.8 % tokens/step on prose (2.705 -> 2.754), +2.5 % on coding with thinking
+  (2.927 -> 2.999); live, the engine accepted 1.766 drafts/step on steps where token verification
+  expects 1.705.
+- **`adapter/folded_result_fence.py`, `DSV41_FOLDED_FENCE=1`, on.** Folded (all-greedy) verify results are
+  cloned before the overlapped D2H copy (sglang#40919); sampled batches were never exposed.
+- `adapter/draft_capture.py` schema 4: also the committed tokens, the drafted tokens and the draft's
+  top-64 logits with its full-vocab normaliser, so verification rules can be evaluated offline.
+- sparkDash after all of the above: prose c1 65.3 (was 61.0), code c1 113.8, structured 124.7.
 - `sitecustomize`: `dspark_verify` was missing from the hooked modules, so `DSV41_DRAFT_CAPTURE`
   never installed; added together with `dspark_draft_sampler`.
 - Tested and not adopted: draft fine-tune on own traffic, multi-pass drafting, expert-sharing

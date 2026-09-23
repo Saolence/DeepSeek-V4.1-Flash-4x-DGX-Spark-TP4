@@ -72,12 +72,26 @@ class EngramLoader(importlib.abc.Loader):
             if os.environ.get('DSV41_WO_A_W8', '0').strip() not in ('0', 'off', 'false', ''):
                 from wo_a_w8 import install_dspark as install_wo_a_w8_dspark
                 install_wo_a_w8_dspark(module)
+            # Gated on DSV41_DRAFT_HEAD_FP8: the draft's LM head from an fp8 copy (target untouched).
+            if os.environ.get('DSV41_DRAFT_HEAD_FP8', '0').strip() not in ('0', 'off', 'false', ''):
+                from draft_head_fp8 import install as install_draft_head_fp8
+                install_draft_head_fp8(module)
         elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_draft_sampler':
             # Gated on DSV41_DRAFT_TAU (unset or 1 = off): draft proposal temperature.
             if os.environ.get('DSV41_DRAFT_TAU', '1').strip() not in ('', '1', '1.0'):
                 from draft_tau import install as install_draft_tau
                 install_draft_tau(module)
+        elif module.__name__ == 'sglang.kernels.ops.speculative.dspark.dspark_accept':
+            # Gated on DSV41_BLOCK_VERIFY: block verification for sampled rows (lossless).
+            if os.environ.get('DSV41_BLOCK_VERIFY', '0').strip() not in ('0', 'off', 'false', ''):
+                from block_verify import install as install_block_verify
+                install_block_verify(module)
         elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_verify':
+            # Gated on DSV41_FOLDED_FENCE: folded results cloned off the persistent verify buffers
+            # (sglang#40919 race under overlap scheduling).
+            if os.environ.get('DSV41_FOLDED_FENCE', '0').strip() not in ('0', 'off', 'false', ''):
+                from folded_result_fence import install as install_folded_fence
+                install_folded_fence(module)
             # Tap for offline draft training data. Gate checked BEFORE the import, so a disabled
             # flag imports nothing. Wraps TargetVerifyExecutor.commit_hidden; capture is switched
             # at runtime by the presence of DSV41_DRAFT_CAPTURE_TRIGGER, no restart needed.
@@ -115,6 +129,7 @@ class EngramFinder(importlib.abc.MetaPathFinder):
                             'sglang.srt.models.deepseek_v4_dspark',
                             'sglang.srt.speculative.dspark_components.dspark_verify',
                             'sglang.srt.speculative.dspark_components.dspark_draft_sampler',
+                            'sglang.kernels.ops.speculative.dspark.dspark_accept',
                             'sglang.srt.managers.schedule_batch',
                             'sglang.srt.layers.attention.dsv4.metadata'):
             return None

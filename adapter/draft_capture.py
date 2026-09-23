@@ -172,7 +172,8 @@ def _drain(torch, force=False):
     _S["pending"] = keep
 
 
-def _capture(torch, batch, logits_output, commit_lens, bs, verify_num_draft_tokens):
+def _capture(torch, batch, logits_output, commit_lens, bs, verify_num_draft_tokens, out_tokens=None,
+             verify_ids=None, draft_logits=None, draft_temps=None):
     t0 = time.perf_counter_ns() if BENCH else 0
     hidden = logits_output.hidden_states
     if hidden is None:
@@ -187,6 +188,22 @@ def _capture(torch, batch, logits_output, commit_lens, bs, verify_num_draft_toke
     src = h.to(torch.float8_e4m3fn) if USE_FP8 else h
     dev_hidden = src.clone()
     dev_commit = commit_lens.clone()
+    # Committed tokens, [bs, stride] int64 from BuildOutTokens: columns 0..correct_len-1 are the
+    # accepted draft tokens, column correct_len is the bonus, so [:, :commit_len] is exactly the
+    # sequence that got committed. This is the teacher-forcing input the Markov head needs
+    # (prev_token for capture row j>=1 is out_tokens[j-1]); `argmax` is only the target's mode and
+    # differs from the sampled token on ~23% of prose rows (measured 2026-09-22, mean p_top1 0.77).
+    # In the folded-accept path this is a view of a graph buffer, hence the clone on the current stream.
+    dev_out = None if out_tokens is None else out_tokens[:bs].to(torch.int32).clone()
+    dev_vid = None if verify_ids is None else verify_ids[:bs].to(torch.int32).clone()
+    dev_tmp = None if draft_temps is None else draft_temps[:bs].float().clone()
+    dev_dv = dev_di = dev_dt = None
+    if draft_logits is not None and TOPK > 0:
+        dl = draft_logits[:bs].float()                       # [bs, 5, V] markov-corrected draft logits
+        dv, di = torch.topk(dl, TOPK, dim=-1)
+        # the draft's normaliser over the FULL vocab, so q can be rebuilt exactly for the top-64
+        lse = torch.logsumexp(dl / (draft_temps[:bs].float().view(-1, 1, 1) if draft_temps is not None else 1.0), dim=-1)
+        dev_dv, dev_di, dev_dt = dv.to(torch.float16).clone(), di.to(torch.int32).clone(), lse.clone()
     logits = logits_output.next_token_logits
     dev_topv = dev_topi = dev_argmax = None
     if logits is not None:
@@ -208,10 +225,16 @@ def _capture(torch, batch, logits_output, commit_lens, bs, verify_num_draft_toke
             "argmax": None if dev_argmax is None else dev_argmax.to("cpu", non_blocking=True),
             "topk_val": None if dev_topv is None else dev_topv.to("cpu", non_blocking=True),
             "topk_idx": None if dev_topi is None else dev_topi.to("cpu", non_blocking=True),
+            "out_tokens": None if dev_out is None else dev_out.to("cpu", non_blocking=True),
+            "verify_ids": None if dev_vid is None else dev_vid.to("cpu", non_blocking=True),
+            "draft_topk_val": None if dev_dv is None else dev_dv.to("cpu", non_blocking=True),
+            "draft_topk_idx": None if dev_di is None else dev_di.to("cpu", non_blocking=True),
+            "draft_lse_t": None if dev_dt is None else dev_dt.to("cpu", non_blocking=True),
+            "draft_temps": None if dev_tmp is None else dev_tmp.to("cpu", non_blocking=True),
         }
         done.record(_S["stream"])
     # 3. Hold references to the device clones until the copy completes, or they are freed early.
-    rec["_hold"] = (dev_hidden, dev_commit, dev_argmax, dev_topv, dev_topi)
+    rec["_hold"] = (dev_hidden, dev_commit, dev_argmax, dev_topv, dev_topi, dev_out, dev_vid, dev_dv, dev_di, dev_dt, dev_tmp)
     rec["event"] = done
     rec["forward_ct"] = int(getattr(batch, "forward_iter", -1))
     rec["rids"] = [getattr(r, "rid", None) for r in getattr(batch, "reqs", [])[:bs]]
@@ -240,6 +263,8 @@ def _run_dir(torch):
         "fp8": USE_FP8, "every": EVERY, "max_gib": MAX_BYTES / (1 << 30),
         "folded_sampling": os.environ.get("SGLANG_DSPARK_FOLDED_SAMPLING", ""),
         "block_size": os.environ.get("DSPARK_BLOCK_SIZE", ""),
+        "out_tokens": True,   # schema v3: shards carry the committed tokens, not only argmax
+        "schema": 4,          # v4: + verify_ids, draft top-64 logits, draft logsumexp at the draft temperature
     }
     try:
         import json as _j
@@ -264,6 +289,26 @@ def install(module):
     threading.Thread(target=_writer_loop, args=(torch,), daemon=True,
                      name="dsv41-draft-capture-writer").start()
     orig = cls.commit_hidden
+    orig_accept = getattr(cls, "accept_and_finalize", None)
+
+    if orig_accept is not None:
+        # The worker calls accept_and_finalize() and then commit_hidden() on the same executor in the
+        # same step (dspark_worker_v2.py:837-887); commit_hidden never receives out_tokens, so park the
+        # accept result on the instance for the capture below. Attribute only, no device work here.
+        def wrapped_accept(self, *a, **kw):
+            outs = orig_accept(self, *a, **kw)
+            try:
+                self._dsv41_out_tokens = getattr(outs, "out_tokens", None)
+                # v4: the drafted tokens (verify rows 1..5 inputs) and the draft's own distribution,
+                # so block-level verification rules can be evaluated offline on engine-exact p and q
+                self._dsv41_verify_ids = kw.get("verify_ids_2d")
+                db = kw.get("draft_block")
+                self._dsv41_draft_logits = getattr(db, "corrected_logits", None)
+                self._dsv41_draft_temps = getattr(db, "temperatures", None)
+            except Exception:
+                pass
+            return outs
+        cls.accept_and_finalize = wrapped_accept
 
     def wrapped(self, *a, **kw):
         _S["calls"] += 1
@@ -288,7 +333,11 @@ def install(module):
                     _S["skip_compact"] += 1
                 else:
                     _capture(torch, kw.get("batch"), lo, cl, int(bs),
-                             int(self.verify_num_draft_tokens))
+                             int(self.verify_num_draft_tokens),
+                             out_tokens=getattr(self, "_dsv41_out_tokens", None),
+                             verify_ids=getattr(self, "_dsv41_verify_ids", None),
+                             draft_logits=getattr(self, "_dsv41_draft_logits", None),
+                             draft_temps=getattr(self, "_dsv41_draft_temps", None))
             if DEBUG and _S["calls"] % 100 == 0:
                 print("[draft_capture] calls=%d captured=%d queued=%d shards=%d pending=%d | skip: armed=%d rank=%d graph=%d kwargs=%d compact=%d hidden=%d stopped=%d" % (
                     _S["calls"], _S["captured"], _S["queued"], _S["shard"], len(_S["pending"]),
@@ -302,5 +351,5 @@ def install(module):
         return orig(self, *a, **kw)
 
     cls.commit_hidden = wrapped
-    print(f"[draft_capture] armed on TargetVerifyExecutor.commit_hidden; trigger={TRIGGER} "
+    print(f"[draft_capture] armed (v4, out_tokens + draft q) on TargetVerifyExecutor.commit_hidden; trigger={TRIGGER} "
           f"out={_S['dir']} every={EVERY} topk={TOPK} fp8={USE_FP8}", flush=True)

@@ -62,9 +62,21 @@ class EngramLoader(importlib.abc.Loader):
         elif module.__name__ == 'sglang.srt.models.deepseek_v4':
             from fast_load import install_deepseek_v4
             install_deepseek_v4(module)
+            # Gated on DSV41_WO_A_W8: verify/draft wo_a reads its fp8 checkpoint bytes.
+            if os.environ.get('DSV41_WO_A_W8', '0').strip() not in ('0', 'off', 'false', ''):
+                from wo_a_w8 import install_model as install_wo_a_w8
+                install_wo_a_w8(module)
         elif module.__name__ == 'sglang.srt.models.deepseek_v4_dspark':
             from fast_load import install_dspark
             install_dspark(module)
+            if os.environ.get('DSV41_WO_A_W8', '0').strip() not in ('0', 'off', 'false', ''):
+                from wo_a_w8 import install_dspark as install_wo_a_w8_dspark
+                install_wo_a_w8_dspark(module)
+        elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_draft_sampler':
+            # Gated on DSV41_DRAFT_TAU (unset or 1 = off): draft proposal temperature.
+            if os.environ.get('DSV41_DRAFT_TAU', '1').strip() not in ('', '1', '1.0'):
+                from draft_tau import install as install_draft_tau
+                install_draft_tau(module)
         elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_verify':
             # Tap for offline draft training data. Gate checked BEFORE the import, so a disabled
             # flag imports nothing. Wraps TargetVerifyExecutor.commit_hidden; capture is switched
@@ -101,6 +113,8 @@ class EngramFinder(importlib.abc.MetaPathFinder):
                             'sglang.srt.model_loader.weight_utils',
                             'sglang.srt.models.deepseek_v4',
                             'sglang.srt.models.deepseek_v4_dspark',
+                            'sglang.srt.speculative.dspark_components.dspark_verify',
+                            'sglang.srt.speculative.dspark_components.dspark_draft_sampler',
                             'sglang.srt.managers.schedule_batch',
                             'sglang.srt.layers.attention.dsv4.metadata'):
             return None

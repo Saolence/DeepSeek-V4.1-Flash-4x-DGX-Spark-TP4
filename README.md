@@ -15,7 +15,7 @@ Other work this profile builds on:
 - **local-inference-lab / Luke Alonso and Jason (original-el8)**, [b12x](https://github.com/local-inference-lab/b12x): RoCEnante, the one-shot RDMA all-reduce (`runtime/b12x`, Apache-2.0, frozen at the SG17 revision).
 - **MiaAI-Lab/sparkDash**, the benchmark used for every number below.
 
-## What runs in production (2026-09-18)
+## What runs in production (2026-09-23)
 
 One image, one env file. Everything in the tables below labelled **production** is this stack. What changed when is in [CHANGELOG.md](CHANGELOG.md):
 
@@ -28,6 +28,8 @@ One image, one env file. Everything in the tables below labelled **production** 
 | Draft | `DSPARK_BLOCK_SIZE=5`, `SGLANG_DSPARK_FOLDED_SAMPLING=2` | on | k=5 wins on code, ties on prose; forced fold keeps sampled decode equal to greedy on the branch |
 | Prefill | `CHUNKED_PREFILL_SIZE=4096` + `DSV41_INDEXER_CHUNKED=1` (v3) + `SPARK_PREFILL_TP_SPLIT=1` | on | bounded indexer transient (sglang#39187) plus the SG18 row split across ranks; 985k prompt leaves 5 GiB on the head |
 | Shared expert | `DSV41_SHARED_PAD_K=1` | on | keeps the K=576 shape on the b12x kernel, −0.9 ms/step, bit-identical |
+| wo_a | `DSV41_WO_A_W8=1` | on | verify/draft `wo_a` reads the checkpoint's fp8 bytes (exact twin of the bf16 copy) in the stock tiling: 43 layers 3.43 → 2.20 ms, step 52.9 → 51.7 ms at c1 |
+| Draft temperature | `DSV41_DRAFT_TAU=0.8` | on | sampled requests only; exact by construction (same q for proposal and acceptance), +1.2 % accepted tokens per step at T=1 / top_p=0.95 |
 | Transport | `SGLANG_ROCE_ALLREDUCE=1`, `SGLANG_ROCE_MAX_SIZE=2097152`, `B12X_ROCE_HCA=rocep1s0f0,roceP2p1s0f0` | on | TP SUM all-reduces up to 2 MiB over RDMA on both rails; 2 MiB covers the 16-slot step (983 KB) |
 | NCCL | `IB_HCA=rocep1s0f0,roceP2p1s0f0` | on | neutral within noise, kept for the remaining collectives |
 | Fabric | switched RoCE, tree reachable | on | every default assumes a switch; a switchless ring sets `NCCL_SWITCHLESS_RING_ONLY=1` instead (see below) |
@@ -255,6 +257,18 @@ and look for `DSV41 prefill TP split (v3) rank=0 ... end=1024` in the boot log. 
 
 What we are pinned to and what would let us move is in [docs/upstream-watch.md](docs/upstream-watch.md) (checked 2026-09-18).
 
+### Tested and not adopted (2026-09-23)
+
+All measured against the live engine or with an offline draft forward whose per-position acceptance matches the engine within 0.016.
+
+- **Fine-tuning the DSpark draft on our own traffic** (~10 M captured tokens, markov + norms + hyper-connection mixers + attention, fp8 quantization-aware, exported in the checkpoint format and swapped in at load): +3.4 % accepted tokens on held-out requests, but 0 % on new prompts and on new coding problems. Agent sessions resend near-identical context, so a request-level split leaks; split by session or date.
+- **Multi-pass drafting** (a second draft forward that sees the tokens drafted so far, trained for it): +2.4 % (2 passes) to +3.9 % (5) accepted tokens; each extra pass costs ~9 % of a step.
+- **Expert-sharing routing** (a verify row's last two experts swapped to one another row already streams when the router scored it within 0.05): 20.5 → 18.4 experts per layer at bs 1, but the step went 52.9 → 56.6 ms from the extra ops, and it changes routing. Reverted.
+- **n-gram lookup over the request's own output** on coding-with-thinking traffic: even an oracle choosing per step is +1 % (3.17 → 3.20 tokens/step); DSpark already covers the repeats.
+- **Relaxed acceptance** (not exact): accepting any draft token inside the target's top-p is only +20 % accepted tokens; on free text the draft's deeper proposals are mostly wrong, not merely differently distributed.
+- **Kernels**: split-K MXFP8 for the small-M dense projections was 1.5–3x slower than b12x (which already reads at ~200 GB/s); the hyper-connection mix kernel stays at 23–28 µs whatever the slicing or weight layout; the draft's LM head in fp8 would save ~0.5 ms with no acceptance loss (3.0882 → 3.0875), not done yet.
+- Where a coding answer with thinking spends its steps: 99.4 % inside the thinking at 3.15 tokens/step, 0.6 % in the code at 5.6 tokens/step.
+
 ### Tested and not adopted (2026-09-18)
 
 - **`SGLANG_DSPARK_OPT_MARKOV_W2_TP_SHARD=0`** (Markov W2 replicated instead of TP-sharded, drops the 0.5 ms vocab all-gather): the bf16 vocab GEMM grows 3.04 → 4.31 ms/step, net step 49.7 → 50.3 ms, prose c1 unchanged. Kept sharded.
@@ -278,6 +292,8 @@ All adapters are import hooks in `adapter/sitecustomize.py`, gated by an environ
 | `adapter/indexer_chunked_v2.py` | `DSV41_INDEXER_CHUNKED` | sglang#39187 verbatim, for the `candidate_metadata` backend of the `dsv4.1` branch (kept for reference) |
 | `adapter/indexer_chunked_v3.py` + `spark_prefill_dense.py` | `DSV41_INDEXER_CHUNKED`, `SPARK_PREFILL_TP_SPLIT` | v2 plus the SG18 prefill TP split inside the chunked path; `sitecustomize` picks v1 or v3 from the stock source |
 | `adapter/engram_prefetch.py` | `DSV41_ENGRAM_PREFETCH` | Forks a side stream after `EngramHasher.forward`, runs the ids copy, the row-store host callback and the row copies for every Engram layer there, and joins at the layer's gather; `DSV41_ENGRAM_PREFETCH_CHECK=1` re-runs the synchronous path and counts differing gathers (0 over benches and needles) |
+| `adapter/wo_a_w8.py` | `DSV41_WO_A_W8` | After load, builds an fp8 twin (e4m3 + one exponent per 32x32 block) of every bf16 `wo_a` and keeps it only when it reproduces the weight exactly; the 2–8-row verify/draft path then runs a copy of the stock `_wo_a_partial` that loads the twin and rebuilds the same bf16 tile in registers. Other shapes stay on the stock kernel |
+| `adapter/draft_tau.py` | `DSV41_DRAFT_TAU` | Scales the per-request temperature of the folded DSpark draft sampler; the same tensor drives draft sampling and the draft probabilities in the rejection sampler |
 | `adapter/fast_load.py` | `DSV41_FAST_LOAD` | Checkpoint tensors this rank will copy (owned experts, no Engram tables) read eagerly by a 16-thread `pread` pool into pinned host memory and returned from `safe_open`; the model's async copies paced to a byte budget so the reads stay just ahead; the DSpark draft load opens only the `mtp.*` shards. Loader-only: the model still does every narrow and copy |
 
 Tests: `tests/test_indexer_chunked.py` and `tests/test_indexer_chunked_v2.py` lift the stock function out of the engine's source, drive it and the backport with deterministic fake kernels, and require bitwise-equal `page_indices`, `raw_indices` and candidate masks over six scenarios (ragged batches, empty requests, full and tail-only mask publishing, mask consumption, one row per chunk up to a single chunk). Both run inside the image build (`Dockerfile` runs v1, `Dockerfile.canary` runs v2), together with upstream's thinking-alias, output-cap and loop-abort tests. `tests/test_fast_load_pacing.py` (all images) checks the copy pacing; the in-image checkpoint test for the eager reads (bitwise equality against the stock `safe_open` for every dtype, draft shard filtering, memory release) needs the weights mounted and is described in `docs/fast-load.md`.

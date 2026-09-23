@@ -3,6 +3,24 @@
 Newest first. Each entry says what changed in the production stack and what was measured; the
 raw results live under `docs/results/`.
 
+## 2026-09-23
+
+- **`adapter/wo_a_w8.py`, `DSV41_WO_A_W8=1`, on.** The verify/draft `wo_a` (2–8 rows) reads the
+  checkpoint's fp8 bytes instead of the bf16 copy made at load: exact fp8 twins for 43 of 43
+  layers, same Triton tiling with the bf16 tile rebuilt in registers. 43 layers at M=6
+  3.43 → 2.20 ms, decode step at c1 52.9 → 51.7 ms (bench of 12 × 800-token answers, warm).
+  MXFP8-epilogue path bitwise identical; plain bf16 path differs in fp32 accumulation order only.
+  Quality gate 72/75 twice against 73/75: primary code+reason+math 53/55 both, json 15/15; the one
+  flip is `prose_p2` coming in at 88 words against a 100-word minimum.
+- **`adapter/draft_tau.py`, `DSV41_DRAFT_TAU=0.8`, on.** Draft proposal temperature for sampled
+  requests; exact by construction. +1.2 % accepted tokens per step at T=1 / top_p=0.95 offline
+  (3.242 → 3.280 on held-out traffic); 0.7–0.8 is the optimum.
+- `sitecustomize`: `dspark_verify` was missing from the hooked modules, so `DSV41_DRAFT_CAPTURE`
+  never installed; added together with `dspark_draft_sampler`.
+- Tested and not adopted: draft fine-tune on own traffic, multi-pass drafting, expert-sharing
+  routing, n-gram lookup, relaxed acceptance, split-K MXFP8 and hyper-connection kernel variants
+  (numbers in the README).
+
 ## 2026-09-18
 
 - Tested and not adopted: Markov W2 unsharded (+0.6 ms/step), fast-load knobs 12 GB / 2 threads

@@ -15,6 +15,11 @@ raw results live under `docs/results/`.
   across boots under EP (sglang#40320); 0 re-tunes from the second boot, was 26.
 - `adapter/block_verify.py`: `live=` for shortened blocks.
 - Fixed verify caps (1..4) measured and rejected: prose -8..-15 %, code up to -40 %.
+- **`DSV41_WO_A_W8_MID=1`, `DSV41_WO_A_W8_DROP=1`, on.** wo_a at 9-192 verify/draft rows from the fp8
+  twin (verify step c4 82.1 -> 78.3 ms, c8 120.0 -> 118.1 ms), and the bf16 copy released (722 MB per
+  rank) with bit-identical prefill through per-call dequantization.
+- `verify_cap`: live lengths broadcast from rank 0 each step (the confidence head reads all-reduced
+  activations, which may differ in the last bits between ranks); no measurable cost.
 
 ## 2026-09-23
 

@@ -65,6 +65,15 @@ def set_live_from_confidence(confidence, bs):
     cum = torch.cumprod(confidence.float().clamp(0, 1), dim=1)
     k = (cum >= _state["thr"]).to(torch.int64).cumprod(dim=1).sum(dim=1).clamp(min=_state["kmin"], max=STRIDE - 1)
     buf[:bs].copy_(k + 1)
+    # Rank-invariant by construction: the head's input comes out of an all-reduce that may differ
+    # in the last bits between ranks, and a live length that differs across ranks would give one
+    # verify row two expert sets. Rank 0 decides, as for the engine's own accept (SpecTpSync).
+    group = _state.get("tp_group")
+    if group is None:
+        from sglang.srt.distributed import get_tp_group
+        group = _state["tp_group"] = get_tp_group()
+    if group.world_size > 1:
+        group.broadcast(buf[:bs], src=0)
 
 
 def _src_rows(m, device):

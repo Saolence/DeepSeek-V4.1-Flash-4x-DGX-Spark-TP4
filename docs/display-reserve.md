@@ -19,6 +19,10 @@ Measured on this fleet (driver 580.173.02): with the pool backing the layer-1 ca
 on both layers). CPU reads from the mapping are uncached (~1 GB/s against 28 GB/s), writes run at
 full speed; a decode step touches a few hundred 264-byte rows, so it does not show.
 
+Fresh clone of this repository with the option on: greedy outputs byte-identical to the ordinary cache
+(three runs), sparkDash prose c1 69.6, code c1 115.3; qeval 71 and 72 of 75 (the one extra miss,
+`reason_r12`, passed on the repeat and in every earlier run).
+
 ## Host setup (every node, once)
 
 DGX OS ships `/etc/modprobe.d/zz-nvidia-drm-override.conf` with `modeset=0`, which disables dumb

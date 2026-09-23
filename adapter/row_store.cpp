@@ -18,7 +18,10 @@
 #include <cstring>
 #include <fcntl.h>
 #include <mutex>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <drm/drm.h>
+#include <drm/drm_mode.h>
 #include <sys/stat.h>
 #include <thread>
 #include <unistd.h>
@@ -306,6 +309,47 @@ bool pin_scales(Store *s) {
 
 }  // namespace
 
+// Optional backing for the next store's row cache: a DRM dumb buffer carved from the GB10
+// firmware's display reservation (needs nvidia_drm modeset=1 fbdev=0, no display server). That
+// memory is outside MemAvailable, so the cache stops competing with the KV pool. Only the CPU
+// touches the cache (rows are staged to the GPU through pinned buffers); CPU reads from this
+// mapping are uncached (~1 GB/s), which a few hundred 264-byte rows per step absorb.
+static char g_drm_node[256];
+static uint64_t g_drm_bytes = 0;
+
+extern "C" void row_store_next_cache_on_drm(const char *node, uint64_t bytes) {
+  std::snprintf(g_drm_node, sizeof g_drm_node, "%s", node ? node : "");
+  g_drm_bytes = bytes;
+}
+
+static uint8_t *drm_cache(uint64_t need) {
+  const uint64_t pitch = 4096 * 4;
+  uint64_t bytes = g_drm_bytes;
+  g_drm_bytes = 0;                                // one store only
+  if (!bytes || !g_drm_node[0] || need > bytes || bytes % (pitch * 1024)) return nullptr;
+  int fd = open(g_drm_node, O_RDWR | O_CLOEXEC);
+  if (fd < 0) { std::fprintf(stderr, "Engram: open %s failed (errno %d)\n", g_drm_node, errno); return nullptr; }
+  struct drm_get_cap cap = {};
+  cap.capability = DRM_CAP_DUMB_BUFFER;
+  struct drm_mode_create_dumb req = {};
+  req.width = 4096; req.height = uint32_t(bytes / pitch); req.bpp = 32;
+  if (ioctl(fd, DRM_IOCTL_GET_CAP, &cap) || !cap.value || ioctl(fd, DRM_IOCTL_MODE_CREATE_DUMB, &req) ||
+      req.size != bytes) {
+    std::fprintf(stderr, "Engram: no dumb buffer of %llu bytes on %s (errno %d)\n",
+                 (unsigned long long)bytes, g_drm_node, errno);
+    close(fd); return nullptr;
+  }
+  struct drm_mode_map_dumb map = {};
+  map.handle = req.handle;
+  void *p = MAP_FAILED;
+  if (!ioctl(fd, DRM_IOCTL_MODE_MAP_DUMB, &map))
+    p = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, map.offset);
+  if (p == MAP_FAILED) { close(fd); return nullptr; }
+  std::fprintf(stderr, "Engram: row cache of %llu bytes on the display reservation (%s)\n",
+               (unsigned long long)need, g_drm_node);
+  return static_cast<uint8_t *>(p);               // fd and mapping live as long as the process
+}
+
 extern "C" Store *row_store_open(const char *path, uint64_t rows,
                                  uint64_t woff, uint64_t soff, uint64_t budget) {
   auto *s = new Store;
@@ -340,8 +384,10 @@ extern "C" Store *row_store_open(const char *path, uint64_t rows,
   s->sets = budget / ((kRowBytes + sizeof(uint64_t)) * s->ways + 1);
   s->slots = s->sets * s->ways;
   if (s->slots) {
-    s->cache = static_cast<uint8_t *>(mmap(nullptr, s->slots * kRowBytes,
-        PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+    s->cache = drm_cache(s->slots * kRowBytes);
+    if (!s->cache)
+      s->cache = static_cast<uint8_t *>(mmap(nullptr, s->slots * kRowBytes,
+          PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
     s->keys = static_cast<uint64_t *>(mmap(nullptr, s->slots * sizeof(uint64_t),
         PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
     s->victim = static_cast<uint8_t *>(mmap(nullptr, s->sets,

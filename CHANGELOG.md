@@ -20,6 +20,9 @@ raw results live under `docs/results/`.
   rank) with bit-identical prefill through per-call dequantization.
 - `verify_cap`: live lengths broadcast from rank 0 each step (the confidence head reads all-reduced
   activations, which may differ in the last bits between ranks); no measurable cost.
+- Optional `DSV41_ENGRAM_DRM_NODE`: one Engram layer's row cache in the GB10 display reservation
+  (DRM dumb buffer, outside MemAvailable), ~1.8 GiB runtime headroom per node, no speed change;
+  host setup in docs/display-reserve.md.
 
 ## 2026-09-23
 

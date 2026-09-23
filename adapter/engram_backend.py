@@ -21,6 +21,8 @@ _lib.row_store_range.argtypes = [P, U, U]
 _lib.row_store_stats.argtypes = [P, C.POINTER(U)]
 _lib.row_store_attach_packed.argtypes = [P, C.c_char_p, U]
 _lib.row_store_attach_packed.restype = C.c_int
+_lib.row_store_next_cache_on_drm.argtypes = [C.c_char_p, U]
+_DRM_USED = [False]
 
 class Work(C.Structure):
     _fields_ = [('store', P), ('ids', P), ('weights', P), ('scales', P), ('count', U)]
@@ -122,6 +124,17 @@ def install(module):
         # the cache it was asked for.
         ranks_per_host = max(1, self.tp_size // max(1, int(os.getenv('NNODES', '1'))))
         budget = int(float(os.getenv('DSV41_CACHE_GIB', '64')) * 2**30) // (2*ranks_per_host)
+        # DSV41_ENGRAM_DRM_NODE=/dev/dri/card0: one Engram layer (DSV41_ENGRAM_DRM_LAYER, default the
+        # first opened) keeps its row cache in the GB10 display reservation, outside MemAvailable,
+        # sized to DSV41_ENGRAM_DRM_MIB (<= 2032, multiple of 16). Its keys stay in ordinary memory.
+        drm_node = os.getenv('DSV41_ENGRAM_DRM_NODE', '')
+        drm_layer = os.getenv('DSV41_ENGRAM_DRM_LAYER', '')
+        if (drm_node and os.path.exists(drm_node) and not _DRM_USED[0]
+                and (not drm_layer or int(drm_layer) == layer_id)):
+            pool = int(os.getenv('DSV41_ENGRAM_DRM_MIB', '1792')) << 20
+            budget = min(budget, pool * 272 // 264)          # slots * 264 B of rows fit the pool
+            _lib.row_store_next_cache_on_drm(drm_node.encode(), pool)
+            _DRM_USED[0] = True
         self._store = _lib.row_store_open(str(filename).encode(), num_embeddings,
             8+length+w['data_offsets'][0], 8+length+s['data_offsets'][0], budget)
         if not self._store:

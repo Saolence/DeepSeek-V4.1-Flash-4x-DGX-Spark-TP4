@@ -3,6 +3,19 @@
 Newest first. Each entry says what changed in the production stack and what was measured; the
 raw results live under `docs/results/`.
 
+## 2026-09-23 (evening)
+
+- **`adapter/verify_cap.py`, `DSV41_VERIFY_CAP=conf:0.1`, on.** Adaptive verify length without changing
+  the verify layout: dead rows reuse the anchor row's experts (in-graph Triton remap), acceptance is
+  capped through the engine's cutoff, the draft confidence head (force-built in static mode) picks the
+  length as a stopping rule. sparkDash prose c1 66.0 -> 69.7, prose c4 125.4 -> 133.5, sampled
+  thinking traffic +5 %, code/structured flat; greedy outputs identical; toy-LM chi-square test in the
+  image build.
+- **`adapter/autotune_keep.py`, `DSV41_AUTOTUNE_KEEP=1`, on.** The FlashInfer MoE autotune cache is kept
+  across boots under EP (sglang#40320); 0 re-tunes from the second boot, was 26.
+- `adapter/block_verify.py`: `live=` for shortened blocks.
+- Fixed verify caps (1..4) measured and rejected: prose -8..-15 %, code up to -40 %.
+
 ## 2026-09-23
 
 - **`adapter/wo_a_w8.py`, `DSV41_WO_A_W8=1`, on.** The verify/draft `wo_a` (2–8 rows) reads the

@@ -66,7 +66,16 @@ class EngramLoader(importlib.abc.Loader):
             if os.environ.get('DSV41_WO_A_W8', '0').strip() not in ('0', 'off', 'false', ''):
                 from wo_a_w8 import install_model as install_wo_a_w8
                 install_wo_a_w8(module)
+            # Gated on DSV41_VERIFY_CAP: marks target-verify forwards for the dead-row expert remap.
+            if os.environ.get('DSV41_VERIFY_CAP', '').strip() not in ('', '0', 'off'):
+                from verify_cap import install_model as install_verify_cap_model
+                install_verify_cap_model(module)
         elif module.__name__ == 'sglang.srt.models.deepseek_v4_dspark':
+            # DSV41_VERIFY_CAP=conf:T needs the draft confidence head, which the engine only builds
+            # in the ragged-verify modes.
+            if os.environ.get('DSV41_VERIFY_CAP', '').strip().startswith('conf:'):
+                from verify_cap import install_dspark as install_verify_cap_dspark
+                install_verify_cap_dspark(module)
             from fast_load import install_dspark
             install_dspark(module)
             if os.environ.get('DSV41_WO_A_W8', '0').strip() not in ('0', 'off', 'false', ''):
@@ -92,12 +101,34 @@ class EngramLoader(importlib.abc.Loader):
             if os.environ.get('DSV41_FOLDED_FENCE', '0').strip() not in ('0', 'off', 'false', ''):
                 from folded_result_fence import install as install_folded_fence
                 install_folded_fence(module)
+            # Gated on DSV41_VERIFY_CAP: per-request verify length through the acceptance cutoff.
+            if os.environ.get('DSV41_VERIFY_CAP', '').strip() not in ('', '0', 'off'):
+                from verify_cap import install_verify as install_verify_cap_verify
+                install_verify_cap_verify(module)
             # Tap for offline draft training data. Gate checked BEFORE the import, so a disabled
             # flag imports nothing. Wraps TargetVerifyExecutor.commit_hidden; capture is switched
             # at runtime by the presence of DSV41_DRAFT_CAPTURE_TRIGGER, no restart needed.
             if os.environ.get('DSV41_DRAFT_CAPTURE', '0').strip() not in ('0', 'off', 'false', ''):
                 from draft_capture import install as install_draft_capture
                 install_draft_capture(module)
+        elif module.__name__ == 'sglang.kernels.ops.moe.moe_fused_gate':
+            if os.environ.get('DSV41_VERIFY_CAP', '').strip() not in ('', '0', 'off'):
+                from verify_cap import install_gate as install_verify_cap_gate
+                install_verify_cap_gate(module)
+        elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_draft':
+            if os.environ.get('DSV41_VERIFY_CAP', '').strip() not in ('', '0', 'off'):
+                from verify_cap import install_draft as install_verify_cap_draft
+                install_verify_cap_draft(module)
+        elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_planner':
+            if os.environ.get('DSV41_VERIFY_CAP', '').strip() not in ('', '0', 'off'):
+                from verify_cap import install_planner as install_verify_cap_planner
+                install_verify_cap_planner(module)
+        elif module.__name__ == 'sglang.srt.model_executor.runner.flashinfer_autotune':
+            # Gated on DSV41_AUTOTUNE_KEEP: keep the FlashInfer autotune cache across boots under EP
+            # (sglang#40320: the stock gate deletes it on every boot).
+            if os.environ.get('DSV41_AUTOTUNE_KEEP', '0').strip() not in ('0', 'off', 'false', ''):
+                from autotune_keep import install as install_autotune_keep
+                install_autotune_keep(module)
         elif module.__name__ == 'sglang.srt.managers.schedule_batch':
             from loop_abort import install as install_loop_abort
             install_loop_abort(module)
@@ -131,6 +162,10 @@ class EngramFinder(importlib.abc.MetaPathFinder):
                             'sglang.srt.speculative.dspark_components.dspark_draft_sampler',
                             'sglang.kernels.ops.speculative.dspark.dspark_accept',
                             'sglang.srt.managers.schedule_batch',
+                            'sglang.kernels.ops.moe.moe_fused_gate',
+                            'sglang.srt.speculative.dspark_components.dspark_draft',
+                            'sglang.srt.speculative.dspark_components.dspark_planner',
+                            'sglang.srt.model_executor.runner.flashinfer_autotune',
                             'sglang.srt.layers.attention.dsv4.metadata'):
             return None
         spec = importlib.machinery.PathFinder.find_spec(fullname, path)

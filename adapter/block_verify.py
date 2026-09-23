@@ -25,14 +25,20 @@ import torch
 ENABLED = os.environ.get("DSV41_BLOCK_VERIFY", "0").strip() not in ("0", "", "off", "false")
 
 
-def block_accept_probs(X, target_probs, draft_probs, eta=None, gumbel=None):
+def block_accept_probs(X, target_probs, draft_probs, eta=None, gumbel=None, live=None):
     """X [bs, g] drafted tokens, target_probs [bs, g+1, V], draft_probs [bs, g, V].
+    live [bs] (optional): drafts actually verified per request (<= g); positions beyond it are
+    treated as never drafted (q = 0, p(X) = 0), which is the block rule for that shorter block.
     Returns (tau [bs] int64, correction token [bs] int64)."""
     bs, g = X.shape
     dev = X.device
     p_tok = target_probs[:, :g].gather(-1, X.unsqueeze(-1)).squeeze(-1).float()
     q_tok = draft_probs.gather(-1, X.unsqueeze(-1)).squeeze(-1).float()
     ratio = p_tok / q_tok.clamp_min(1e-30)
+    if live is not None:
+        alive = torch.arange(g, device=dev).view(1, -1) < live.view(-1, 1)
+        ratio = torch.where(alive, ratio, torch.zeros_like(ratio))
+        draft_probs = draft_probs * alive.unsqueeze(-1).to(draft_probs.dtype)
     w = torch.cumprod(ratio, dim=1)
     # w_i = min(w_{i-1} * r_i, 1) is not a plain cumprod once it saturates; run the recursion
     ws = []
@@ -49,6 +55,8 @@ def block_accept_probs(X, target_probs, draft_probs, eta=None, gumbel=None):
     if eta is None:
         eta = torch.rand(bs, g, device=dev)
     ok = eta <= h                                                               # [bs, g]
+    if live is not None:
+        ok = ok & alive
     idx = torch.arange(1, g + 1, device=dev).view(1, -1)
     tau = torch.where(ok, idx, torch.zeros_like(idx)).max(dim=1).values        # [bs]
     # correction distribution at position tau (0-based row tau of target / draft)
@@ -83,7 +91,7 @@ def install(accept_module):
 
     def execute(*, candidates, target_logits, draft_probs, sampling_info, draft_input, gamma,
                 verify_num_draft_tokens, cutoff_verify_lens=None):
-        if cutoff_verify_lens is not None:          # ragged verify: keep the stock rule
+        if cutoff_verify_lens is not None and os.environ.get("DSV41_VERIFY_CAP", "").strip() in ("", "0", "off"):
             return cls._dsv41_orig_execute(candidates=candidates, target_logits=target_logits,
                                            draft_probs=draft_probs, sampling_info=sampling_info,
                                            draft_input=draft_input, gamma=gamma,
@@ -100,8 +108,9 @@ def install(accept_module):
                 draft_token_num=verify_num_draft_tokens, bs=bs, max_top_k=draft_input.max_top_k,
                 uniform_top_k_value=draft_input.uniform_top_k_value)
         X = candidates.view(bs, verify_num_draft_tokens)[:, 1:gamma + 1].long()
+        live = None if cutoff_verify_lens is None else (cutoff_verify_lens[:bs].to(torch.int64) - 1)
         tau, corr = block_accept_probs(X, target_probs.view(bs, verify_num_draft_tokens, -1),
-                                       draft_probs.view(bs, gamma, -1))
+                                       draft_probs.view(bs, gamma, -1), live=live)
         return tau.to(torch.int32), corr.to(torch.int64), torch.zeros(bs, dtype=torch.int32, device=candidates.device)
 
     cls._dsv41_orig_execute = cls.execute

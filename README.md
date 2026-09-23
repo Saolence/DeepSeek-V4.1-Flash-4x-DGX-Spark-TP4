@@ -140,7 +140,7 @@ Same boots, sparkDash c1 medians of three; step probe = greedy 400-token request
 | `conf:0.2` | 65.7 | 115.9 | 124.5 | 40.1, 49.1 | 48.0, 78.4 |
 | `conf:0.35` | 61.8 | 116.4 | 124.3 | 38.6, 48.9 | 44.5, 80.0 |
 
-Sampled thinking traffic (T=1, top_p 0.95, 6 technical prompts x 2, 800 tokens, c1), boots in the order conf / unset / conf / unset: 53.8, 53.2, 56.7, 52.0 tok/s, i.e. 55.3 vs 52.6 (+5 %); accepted tokens per step 2.62 vs 2.72, step 47.4 vs 51.9 ms. qeval 71 and 72 of 75 (primary 53 of 55; `math_m9` hits the 640-token cap on most images, `prose_p2` as noted below). A fixed cap loses: the head is what makes the cut pay.
+Sampled thinking traffic (T=1, top_p 0.95, 6 technical prompts x 2, 800 tokens, c1), boots in the order conf / unset / conf / unset: 53.8, 53.2, 56.7, 52.0 tok/s, i.e. 55.3 vs 52.6 (+5 %); accepted tokens per step 2.62 vs 2.72, step 47.4 vs 51.9 ms. qeval 71 and 72 of 75 (primary 53 of 55; `math_m9` hits the 640-token cap on most images, `prose_p2` as noted below). A fixed cap loses: the head is what makes the cut pay. Rebuilt from a fresh clone of this repository and booted with the `.env.tp4.example` production line: prose c1 70.2 (median of 62.8 / 70.2 / 70.2), code c1 117.9, structured 125.7; qeval 73 of 75.
 
 Note on measuring: a dashboard polling `nvidia-smi` every 2 s on every node cost 0.6 ms per decode step here (47.1 vs 46.5 ms/step with it paused); the sparkDash instance used for these tables polls every 10 s since (`POLL_INTERVAL_GPU=10000`, `POLL_INTERVAL_BANDWIDTH=10000`).
 

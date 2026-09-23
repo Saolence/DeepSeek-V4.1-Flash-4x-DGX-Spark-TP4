@@ -24,7 +24,8 @@ import torch
 
 SPEC = os.environ.get("DSV41_VERIFY_CAP", "").strip()
 ENABLED = SPEC not in ("", "0", "off")
-STRIDE = 6
+# verify rows per request = DSPARK block size + 1 (anchor); 6 for the stock block of 5
+STRIDE = int(os.environ.get("DSV41_VERIFY_CAP_STRIDE") or int(os.environ.get("DSPARK_BLOCK_SIZE", "5")) + 1)
 MAX_BS = 64
 E_TARGET, K_TARGET = 384, 6
 
@@ -32,7 +33,10 @@ _state = {"live": None, "in_verify": False, "conf": None, "fixed": None, "thr": 
           "kmin": int(os.environ.get("DSV41_VERIFY_CAP_MIN", "1")), "logged": False}
 if ENABLED:
     if SPEC.startswith("conf:"):
-        _state["thr"] = float(SPEC.split(":", 1)[1])
+        # one threshold for every draft, or one per draft 2..5 ("conf:0.25,0.25,0.03,0.06");
+        # draft 1 is always verified (DSV41_VERIFY_CAP_MIN, default 1)
+        vals = [float(v) for v in SPEC.split(":", 1)[1].split(",")]
+        _state["thr"] = vals[0] if len(vals) == 1 else [0.0] + vals
     else:
         _state["fixed"] = int(SPEC)
 
@@ -62,8 +66,15 @@ def set_live_from_confidence(confidence, bs):
     if _state["thr"] is None or confidence is None:
         return
     buf = live_buf(confidence.device)
+    _state["last_conf"] = confidence
     cum = torch.cumprod(confidence.float().clamp(0, 1), dim=1)
-    k = (cum >= _state["thr"]).to(torch.int64).cumprod(dim=1).sum(dim=1).clamp(min=_state["kmin"], max=STRIDE - 1)
+    thr = _state["thr"]
+    if isinstance(thr, list):
+        if _state.get("thr_t") is None or _state["thr_t"].device != cum.device:
+            t = (thr + [thr[-1]] * cum.shape[1])[:cum.shape[1]]
+            _state["thr_t"] = torch.tensor(t, dtype=torch.float32, device=cum.device)
+        thr = _state["thr_t"]
+    k = (cum >= thr).to(torch.int64).cumprod(dim=1).sum(dim=1).clamp(min=_state["kmin"], max=STRIDE - 1)
     buf[:bs].copy_(k + 1)
     # Rank-invariant by construction: the head's input comes out of an all-reduce that may differ
     # in the last bits between ranks, and a live length that differs across ranks would give one
@@ -224,6 +235,31 @@ def install_verify(verify_module):
         return orig_run(self, batch=batch, draft_input=draft_input, verify_ids_2d=verify_ids_2d, **kw)
 
     ex.run_non_compact = run_non_compact
+
+    # DSV41_VERIFY_CAP_LOG=/state/vcap-log.bin (rank 0): per verify step and request, the confidence
+    # vector, the live length used and the accepted drafts. Costs a device sync per step: measurement only.
+    log_path = os.environ.get("DSV41_VERIFY_CAP_LOG", "")
+    if log_path and _state["thr"] is not None:
+        orig_aaf = ex.accept_and_finalize
+        _state["log"] = None
+
+        def accept_and_finalize(self, *a, **kw):
+            outs = orig_aaf(self, *a, **kw)
+            conf = _state.get("last_conf")
+            if conf is not None:
+                import numpy as np
+                if _state["log"] is None:
+                    from sglang.srt.distributed import get_tp_group
+                    _state["log"] = open(log_path, "ab") if get_tp_group().rank_in_group == 0 else False
+                if _state["log"]:
+                    bs = conf.shape[0]
+                    rec = torch.cat([conf.float(), live_buf()[:bs].float().unsqueeze(1),
+                                     outs.correct_len[:bs].float().unsqueeze(1)], dim=1)
+                    _state["log"].write(rec.cpu().numpy().astype(np.float32).tobytes())
+                    _state["log"].flush()
+            return outs
+
+        ex.accept_and_finalize = accept_and_finalize
 
 
 def install_draft(draft_module):

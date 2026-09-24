@@ -3,6 +3,57 @@
 Newest first. Each entry says what changed in the production stack and what was measured; the
 raw results live under `docs/results/`.
 
+## 2026-09-23 (evening)
+
+- **`adapter/verify_cap.py`, `DSV41_VERIFY_CAP=conf:0.1`, on.** Adaptive verify length without changing
+  the verify layout: dead rows reuse the anchor row's experts (in-graph Triton remap), acceptance is
+  capped through the engine's cutoff, the draft confidence head (force-built in static mode) picks the
+  length as a stopping rule. sparkDash prose c1 66.0 -> 69.7, prose c4 125.4 -> 133.5, sampled
+  thinking traffic +5 %, code/structured flat; greedy outputs identical; toy-LM chi-square test in the
+  image build.
+- **`adapter/autotune_keep.py`, `DSV41_AUTOTUNE_KEEP=1`, on.** The FlashInfer MoE autotune cache is kept
+  across boots under EP (sglang#40320); 0 re-tunes from the second boot, was 26.
+- `adapter/block_verify.py`: `live=` for shortened blocks.
+- Fixed verify caps (1..4) measured and rejected: prose -8..-15 %, code up to -40 %.
+- **`DSV41_WO_A_W8_MID=1`, `DSV41_WO_A_W8_DROP=1`, on.** wo_a at 9-192 verify/draft rows from the fp8
+  twin (verify step c4 82.1 -> 78.3 ms, c8 120.0 -> 118.1 ms), and the bf16 copy released (722 MB per
+  rank) with bit-identical prefill through per-call dequantization.
+- `verify_cap`: live lengths broadcast from rank 0 each step (the confidence head reads all-reduced
+  activations, which may differ in the last bits between ranks); no measurable cost.
+- Optional `DSV41_ENGRAM_DRM_NODE`: one Engram layer's row cache in the GB10 display reservation
+  (DRM dumb buffer, outside MemAvailable), ~1.8 GiB runtime headroom per node, no speed change;
+  host setup in docs/display-reserve.md.
+
+## 2026-09-23
+
+- **`adapter/wo_a_w8.py`, `DSV41_WO_A_W8=1`, on.** The verify/draft `wo_a` (2–8 rows) reads the
+  checkpoint's fp8 bytes instead of the bf16 copy made at load: exact fp8 twins for 43 of 43
+  layers, same Triton tiling with the bf16 tile rebuilt in registers. 43 layers at M=6
+  3.43 → 2.20 ms, decode step at c1 52.9 → 51.7 ms (bench of 12 × 800-token answers, warm).
+  MXFP8-epilogue path bitwise identical; plain bf16 path differs in fp32 accumulation order only.
+  Quality gate 72/75 twice against 73/75: primary code+reason+math 53/55 both, json 15/15; the one
+  flip is `prose_p2` coming in at 88 words against a 100-word minimum.
+- **`adapter/draft_tau.py`, `DSV41_DRAFT_TAU=0.8`, on.** Draft proposal temperature for sampled
+  requests; exact by construction. +1.2 % accepted tokens per step at T=1 / top_p=0.95 offline
+  (3.242 → 3.280 on held-out traffic); 0.7–0.8 is the optimum.
+- **`adapter/draft_head_fp8.py`, `DSV41_DRAFT_HEAD_FP8=1`, on.** The draft's block logits come from an
+  fp8 copy of the shared LM head (target head untouched): 1405 → 721 us, live step 51.7 → 50.9 ms.
+- **`adapter/block_verify.py`, `DSV41_BLOCK_VERIFY=1`, on.** Block verification (Sun et al., ICLR 2025)
+  for sampled rows. Lossless (chi-square test on a toy LM in the image build). Offline on
+  engine-exact p and q: +1.8 % tokens/step on prose (2.705 -> 2.754), +2.5 % on coding with thinking
+  (2.927 -> 2.999); live, the engine accepted 1.766 drafts/step on steps where token verification
+  expects 1.705.
+- **`adapter/folded_result_fence.py`, `DSV41_FOLDED_FENCE=1`, on.** Folded (all-greedy) verify results are
+  cloned before the overlapped D2H copy (sglang#40919); sampled batches were never exposed.
+- `adapter/draft_capture.py` schema 4: also the committed tokens, the drafted tokens and the draft's
+  top-64 logits with its full-vocab normaliser, so verification rules can be evaluated offline.
+- sparkDash after all of the above: prose c1 65.3 (was 61.0), code c1 113.8, structured 124.7.
+- `sitecustomize`: `dspark_verify` was missing from the hooked modules, so `DSV41_DRAFT_CAPTURE`
+  never installed; added together with `dspark_draft_sampler`.
+- Tested and not adopted: draft fine-tune on own traffic, multi-pass drafting, expert-sharing
+  routing, n-gram lookup, relaxed acceptance, split-K MXFP8 and hyper-connection kernel variants
+  (numbers in the README).
+
 ## 2026-09-18
 
 - Tested and not adopted: Markov W2 unsharded (+0.6 ms/step), fast-load knobs 12 GB / 2 threads
